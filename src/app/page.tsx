@@ -6,6 +6,10 @@ import { usd } from "@/lib/format";
 import { Sidebar } from "@/components/Sidebar";
 import { DealCard } from "@/components/DealCard";
 import { DealDetail } from "@/components/DealDetail";
+import { SourcesPanel } from "@/components/SourcesPanel";
+import { ImportModal } from "@/components/ImportModal";
+import type { TargetSite } from "@/lib/sources";
+import { DEFAULT_SITES, loadSources, saveSources, loadAiSearch, saveAiSearch } from "@/lib/sources";
 
 const SUGGESTIONS = [
   "Toys under $20 with 50% ROI",
@@ -27,9 +31,19 @@ export default function Home() {
   const [filter, setFilter] = useState<Filter>("ALL");
   const [selected, setSelected] = useState<Deal | null>(null);
 
-  async function load(q: string, s: number) {
+  // Targeted sources + AI web search + spreadsheet imports.
+  const [sites, setSites] = useState<TargetSite[]>(DEFAULT_SITES);
+  const [aiSearch, setAiSearch] = useState(true);
+  const [showSources, setShowSources] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [imported, setImported] = useState<Deal[]>([]);
+
+  async function load(q: string, s: number, opts?: { sites?: TargetSite[]; ai?: boolean }) {
     setLoading(true);
-    const res = await fetch(`/api/deals?q=${encodeURIComponent(q)}&seed=${s}`);
+    const activeSites = (opts?.sites ?? sites).filter((x) => x.enabled).map((x) => x.domain);
+    const ai = (opts?.ai ?? aiSearch) ? "1" : "0";
+    const params = new URLSearchParams({ q, seed: String(s), sites: activeSites.join(","), ai });
+    const res = await fetch(`/api/deals?${params.toString()}`);
     const data = await res.json();
     setDeals(data.deals);
     setUnderstood(data.parsed?.understood ?? []);
@@ -38,11 +52,27 @@ export default function Home() {
   }
 
   useEffect(() => {
-    // Initial fetch on mount; defer so we don't setState synchronously in the effect body.
-    const id = setTimeout(() => load("", seed), 0);
+    // Hydrate saved sources/AI preference, then do the initial fetch. Deferred
+    // so we don't setState synchronously in the effect body.
+    const s = loadSources();
+    const ai = loadAiSearch();
+    const id = setTimeout(() => {
+      setSites(s);
+      setAiSearch(ai);
+      load("", seed, { sites: s, ai });
+    }, 0);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function updateSites(next: TargetSite[]) {
+    setSites(next);
+    saveSources(next);
+  }
+  function updateAi(on: boolean) {
+    setAiSearch(on);
+    saveAiSearch(on);
+  }
 
   function runScan() {
     setScanning(true);
@@ -53,17 +83,23 @@ export default function Home() {
     }, 1400);
   }
 
+  // Imported rows live alongside scanned deals; combined feed is ROI-ranked.
+  const allDeals = useMemo(
+    () => [...imported, ...deals].sort((a, b) => b.roi - a.roi),
+    [imported, deals]
+  );
+
   const visible = useMemo(
-    () => (filter === "ALL" ? deals : deals.filter((d) => d.verdict === filter)),
-    [deals, filter]
+    () => (filter === "ALL" ? allDeals : allDeals.filter((d) => d.verdict === filter)),
+    [allDeals, filter]
   );
 
   const stats = useMemo(() => {
-    const buys = deals.filter((d) => d.verdict === "BUY");
-    const avgRoi = deals.length ? deals.reduce((a, d) => a + d.roi, 0) / deals.length : 0;
+    const buys = allDeals.filter((d) => d.verdict === "BUY");
+    const avgRoi = allDeals.length ? allDeals.reduce((a, d) => a + d.roi, 0) / allDeals.length : 0;
     const profit = buys.reduce((a, d) => a + d.profit * Math.min(d.monthlySales, 30), 0);
-    return { found: deals.length, buys: buys.length, avgRoi, profit };
-  }, [deals]);
+    return { found: allDeals.length, buys: buys.length, avgRoi, profit };
+  }, [allDeals]);
 
   return (
     <div className="flex min-h-screen">
@@ -71,8 +107,27 @@ export default function Home() {
 
       <main className="min-w-0 flex-1">
         <header className="glass sticky top-0 z-30 border-b border-border px-5 py-3.5">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <SearchBar value={query} onChange={setQuery} onSubmit={() => load(query, seed)} understood={understood} />
+            <button
+              onClick={() => setShowSources(true)}
+              className="flex shrink-0 items-center gap-2 rounded-xl border border-border bg-white/5 px-3.5 py-2.5 text-[13px] font-medium text-text transition hover:bg-white/10"
+              title="Choose which sites the agent searches"
+            >
+              <GlobeIcon />
+              <span className="hidden sm:inline">Sources</span>
+              <span className="rounded-md bg-accent/15 px-1.5 text-[11px] font-semibold text-accent">
+                {sites.filter((s) => s.enabled).length + (aiSearch ? 1 : 0)}
+              </span>
+            </button>
+            <button
+              onClick={() => setShowImport(true)}
+              className="flex shrink-0 items-center gap-2 rounded-xl border border-border bg-white/5 px-3.5 py-2.5 text-[13px] font-medium text-text transition hover:bg-white/10"
+              title="Import an Excel/CSV of items"
+            >
+              <UploadIcon />
+              <span className="hidden sm:inline">Import</span>
+            </button>
             <button
               onClick={runScan}
               disabled={scanning}
@@ -151,6 +206,23 @@ export default function Home() {
       </main>
 
       {selected && <DealDetail deal={selected} onClose={() => setSelected(null)} />}
+
+      {showSources && (
+        <SourcesPanel
+          sites={sites}
+          aiSearch={aiSearch}
+          onChange={updateSites}
+          onAiChange={updateAi}
+          onClose={() => setShowSources(false)}
+        />
+      )}
+
+      {showImport && (
+        <ImportModal
+          onClose={() => setShowImport(false)}
+          onImport={(d) => setImported((prev) => [...d, ...prev])}
+        />
+      )}
     </div>
   );
 }
@@ -216,6 +288,23 @@ function Radar() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
       <path d="M19.07 4.93A10 10 0 1112 2v10l6 4" />
+    </svg>
+  );
+}
+
+function GlobeIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18" />
+    </svg>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
     </svg>
   );
 }

@@ -26,6 +26,11 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
             <span className="font-mono text-accent">{deal.match.asin}</span>
             <span className="text-text-faint">·</span>
             <span>{deal.category}</span>
+            {deal.origin !== "scan" && (
+              <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-text-faint">
+                {deal.origin === "import" ? "Imported" : "Web"}
+              </span>
+            )}
           </div>
         </div>
       </div>

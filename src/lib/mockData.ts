@@ -3,11 +3,11 @@
 // profit/ROI is run through the same calcProfit() used in production.
 
 import { calcProfit } from "./profit";
+import { decideVerdict } from "./verdict";
 import type {
   Deal,
   RiskFlag,
   SourceSite,
-  Verdict,
   PricePoint,
   AsinMatch,
 } from "./types";
@@ -113,20 +113,22 @@ function pickRisks(rng: () => number, brand: string, bsr: number, match: AsinMat
   return risks;
 }
 
-function decideVerdict(roi: number, conf: number, risks: RiskFlag[]): { verdict: Verdict; reason: string } {
-  if (conf < 75 || risks.includes("VARIATION_MISMATCH"))
-    return { verdict: "WATCH", reason: `ASIN match only ${conf}% confident — confirm the exact item before committing.` };
-  if (roi >= 40 && risks.length === 0)
-    return { verdict: "BUY", reason: `${roi}% ROI with a clean risk profile and strong sell-through. Solid flip.` };
-  if (roi >= 30)
-    return { verdict: "BUY", reason: `${roi}% ROI clears your threshold; ${risks.length ? "watch the flagged risk" : "demand looks healthy"}.` };
-  if (roi >= 15)
-    return { verdict: "WATCH", reason: `${roi}% ROI is thin for the risk here — only buy at a deeper discount.` };
-  return { verdict: "PASS", reason: `${roi}% ROI doesn't justify the fees and risk on this one.` };
+// Optional targeting: restrict the scan to specific sites and/or AI web search.
+export interface ScanTargets {
+  /** Site names/domains the user explicitly added (e.g. "walmart.com"). */
+  sites?: string[];
+  /** Whether the open-web AI search contributes finds. */
+  aiSearch?: boolean;
 }
 
-export function generateDeals(seed = 7, count = 14): Deal[] {
+export function generateDeals(seed = 7, count = 14, targets?: ScanTargets): Deal[] {
   const rng = mulberry32(seed);
+  // Build the pool of sources this scan is allowed to surface from.
+  const pool: string[] = [];
+  if (targets?.sites?.length) pool.push(...targets.sites);
+  if (targets?.aiSearch) pool.push("AI Web Search");
+  if (pool.length === 0) pool.push(...SITES); // default: scan everything
+
   const deals: Deal[] = [];
   for (let i = 0; i < count; i++) {
     const prod = PRODUCTS[Math.floor(rng() * PRODUCTS.length)];
@@ -144,7 +146,7 @@ export function generateDeals(seed = 7, count = 14): Deal[] {
     });
     const risks = pickRisks(rng, prod.brand, bsr, match);
     const { verdict, reason } = decideVerdict(roi, match.confidence, risks);
-    const site = SITES[Math.floor(rng() * SITES.length)];
+    const site = pool[Math.floor(rng() * pool.length)];
     deals.push({
       id: `deal_${seed}_${i}`,
       title: prod.title,
@@ -153,6 +155,7 @@ export function generateDeals(seed = 7, count = 14): Deal[] {
       imageColor: prod.color,
       match,
       source: site,
+      origin: site === "AI Web Search" ? "web" : "scan",
       sourceUrl: "#",
       sourcePrice,
       amazonPrice,

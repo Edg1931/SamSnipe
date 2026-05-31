@@ -49,7 +49,10 @@ export interface Deal {
   imageColor: string; // placeholder swatch until real images are wired
   match: AsinMatch;
 
-  source: SourceSite;
+  /** Where the agent found it: a default site, a custom domain, "AI Web Search", or "Imported". */
+  source: string;
+  /** How it entered the app — drives the little origin badge. */
+  origin: "scan" | "import" | "web";
   sourceUrl: string;
   sourcePrice: number; // your cost per unit
   amazonPrice: number; // current buy-box price

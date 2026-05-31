@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Deal, Verdict } from "@/lib/types";
 import { usd } from "@/lib/format";
 import { Sidebar } from "@/components/Sidebar";
+import { BottomNav } from "@/components/BottomNav";
+import { CommandCenter } from "@/components/CommandCenter";
 import { DealCard } from "@/components/DealCard";
 import { DealTable } from "@/components/DealTable";
 import { DealDetail } from "@/components/DealDetail";
 import { computeSurvival } from "@/lib/survival";
 import { dealScore } from "@/lib/score";
+import { assessTrust } from "@/lib/trust";
 import { SourcesPanel } from "@/components/SourcesPanel";
 import { ImportModal } from "@/components/ImportModal";
 import { BrandsPanel } from "@/components/BrandsPanel";
@@ -51,11 +54,14 @@ export default function Home() {
   const [filter, setFilter] = useState<Filter>("ALL");
   const [selected, setSelected] = useState<Deal | null>(null);
 
-  // Feed controls: filters, view density, pagination.
+  // Home vs feed, feed controls: filters, view density, pagination.
   const PAGE = 24;
+  const [mode, setMode] = useState<"home" | "feed">("home");
   const [view, setView] = useState<"cards" | "table">("cards");
   const [showFilters, setShowFilters] = useState(false);
   const [shown, setShown] = useState(PAGE);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [findingsCount, setFindingsCount] = useState(0);
   const [crit, setCrit] = useState({ minRoi: 0, maxBsr: 0, maxCost: 0, minSurvival: 0, minSold: 0, category: "" });
 
   // Targeted sources + AI web search + spreadsheet imports.
@@ -131,6 +137,11 @@ export default function Home() {
       setDecisions(dec);
       setSearches(sx);
       load("", seed, { sites: s, ai });
+      // Auto-Pilot findings count for the home callout + nav badge.
+      fetch("/api/autopilot/findings")
+        .then((r) => r.json())
+        .then((d) => setFindingsCount(Array.isArray(d.inbox) ? d.inbox.length : 0))
+        .catch(() => {});
     }, 0);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,19 +155,21 @@ export default function Home() {
     setSearches(s);
     saveSearches(s);
   }
-  // Single entry point for the sidebar nav — close everything, then open one.
+  // Single entry point for sidebar + bottom nav — close everything, then route.
   function navigate(key: string) {
     setShowSources(false); setShowBrands(false); setShowImport(false);
     setShowBuyList(false); setShowCopilot(false); setShowApprovals(false);
     setShowOptimizer(false); setShowScan(false); setShowAutoPilot(false);
     setSelected(null);
-    if (key === "autopilot") setShowAutoPilot(true);
+    if (key === "home") setMode("home");
+    else if (key === "deals" || key === "feed") setMode("feed");
+    else if (key === "autopilot") setShowAutoPilot(true);
     else if (key === "optimizer") setShowOptimizer(true);
     else if (key === "buylist") setShowBuyList(true);
+    else if (key === "copilot") setShowCopilot(true);
     else if (key === "scan") setShowScan(true);
     else if (key === "sources") setShowSources(true);
     else if (key === "approvals") setShowApprovals(true);
-    // "deals" simply closes panels and returns to the feed.
   }
   function runWatch(q: string) {
     setQuery(q);
@@ -259,6 +272,7 @@ export default function Home() {
   // Apply the filter rail to the brand-cleaned feed.
   const filteredDeals = useMemo(() => {
     return allDeals.filter((d) => {
+      if (verifiedOnly && assessTrust(d).level !== "verified") return false;
       if (crit.minRoi && d.roi < crit.minRoi) return false;
       if (crit.maxBsr && d.bsr > crit.maxBsr) return false;
       if (crit.maxCost && d.sourcePrice > crit.maxCost) return false;
@@ -267,7 +281,7 @@ export default function Home() {
       if (crit.minSurvival && computeSurvival(d).score < crit.minSurvival) return false;
       return true;
     });
-  }, [allDeals, crit]);
+  }, [allDeals, crit, verifiedOnly]);
 
   const visible = useMemo(() => {
     let list = filter === "ALL" ? filteredDeals : filteredDeals.filter((d) => d.verdict === filter);
@@ -281,7 +295,8 @@ export default function Home() {
 
   const activeFilters =
     (crit.minRoi ? 1 : 0) + (crit.maxBsr ? 1 : 0) + (crit.maxCost ? 1 : 0) +
-    (crit.minSurvival ? 1 : 0) + (crit.minSold ? 1 : 0) + (crit.category ? 1 : 0);
+    (crit.minSurvival ? 1 : 0) + (crit.minSold ? 1 : 0) + (crit.category ? 1 : 0) +
+    (verifiedOnly ? 1 : 0);
 
   // Group the visible deals by source/website when requested.
   const grouped = useMemo(() => {
@@ -317,7 +332,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar active="deals" onNavigate={navigate} />
+      <Sidebar active={mode === "home" ? "home" : "deals"} onNavigate={navigate} />
 
       <main className="min-w-0 flex-1">
         <header className="glass sticky top-0 z-30 border-b border-border px-5 py-3.5">
@@ -363,7 +378,21 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="px-5 py-5">
+        {mode === "home" ? (
+          <CommandCenter
+            deals={allDeals}
+            dataSource={dataSource}
+            findingsCount={findingsCount}
+            scanning={scanning}
+            discovering={discovering}
+            onOpenDeal={setSelected}
+            onSeeAll={() => setMode("feed")}
+            onRunScan={runScan}
+            onDiscover={discover}
+            onOpenAutoPilot={() => navigate("autopilot")}
+          />
+        ) : (
+        <div className="px-5 py-5 pb-24 lg:pb-5">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <StatCard label="Deals found" value={String(stats.found)} sub="this scan" tone="#10d98e" icon="🎯" />
             <StatCard label="BUY signals" value={String(stats.buys)} sub="ready to source" tone="#84cc16" icon="✅" />
@@ -501,9 +530,18 @@ export default function Home() {
                   ))}
                 </select>
               </label>
+              <label className="flex items-center gap-2 self-end pb-1.5 text-[12px] text-text-dim">
+                <input
+                  type="checkbox"
+                  checked={verifiedOnly}
+                  onChange={(e) => { setVerifiedOnly(e.target.checked); setShown(PAGE); }}
+                  className="accent-[#10d98e]"
+                />
+                Keepa-verified only
+              </label>
               {activeFilters > 0 && (
                 <button
-                  onClick={() => { setCrit({ minRoi: 0, maxBsr: 0, maxCost: 0, minSurvival: 0, minSold: 0, category: "" }); setShown(PAGE); }}
+                  onClick={() => { setCrit({ minRoi: 0, maxBsr: 0, maxCost: 0, minSurvival: 0, minSold: 0, category: "" }); setVerifiedOnly(false); setShown(PAGE); }}
                   className="col-span-2 self-end rounded-lg border border-border bg-white/5 py-1.5 text-[12px] text-text-dim hover:text-text sm:col-span-1"
                 >
                   Reset filters
@@ -567,6 +605,7 @@ export default function Home() {
             </div>
           )}
         </div>
+        )}
       </main>
 
       {selected && (
@@ -641,6 +680,8 @@ export default function Home() {
           onAddFindings={(d) => { setImported((prev) => [...d, ...prev]); setShown(PAGE); }}
         />
       )}
+
+      <BottomNav mode={mode} findingsCount={findingsCount} onNavigate={navigate} />
     </div>
   );
 }

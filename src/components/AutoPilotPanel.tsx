@@ -60,8 +60,11 @@ export function AutoPilotPanel({
   async function runNow() {
     setRunning(true);
     try {
-      await fetch("/api/autopilot/run", { method: "POST" });
-      await loadFindings();
+      // The run returns its results inline, so finds show even with no store.
+      const r = await fetch("/api/autopilot/run", { method: "POST" });
+      const d = await r.json();
+      if (d.findings) setFindings(d.findings);
+      if (Array.isArray(d.inbox)) setInbox(d.inbox);
     } finally {
       setRunning(false);
     }
@@ -87,7 +90,7 @@ export function AutoPilotPanel({
               <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/15 text-accent">⚡</span>
               Auto-Pilot
             </h2>
-            <p className="mt-0.5 text-[11px] text-text-dim">Saved briefs the agent hunts for you — on a schedule.</p>
+            <p className="mt-0.5 text-[11px] text-text-dim">Saved briefs the agent hunts for you — on demand.</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-text-dim hover:bg-white/5 hover:text-text">✕</button>
         </div>
@@ -96,8 +99,8 @@ export function AutoPilotPanel({
         <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-[12px] text-text">
-              <span className={`h-2 w-2 rounded-full ${storeOn ? "bg-accent" : "bg-warn"}`} />
-              {storeOn ? `Background runs active · ${backend}` : "Background storage not configured"}
+              <span className={`h-2 w-2 rounded-full ${storeOn ? "bg-accent" : "bg-sky-400"}`} />
+              {storeOn ? `On-demand + persistent store · ${backend}` : "On-demand mode"}
             </div>
             <button onClick={runNow} disabled={running} className="rounded-lg bg-accent px-3 py-1 text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-60">
               {running ? "Running…" : "Run now"}
@@ -109,10 +112,10 @@ export function AutoPilotPanel({
               {" · "}Keepa {findings.keepaLive ? "live" : "off"} · web {findings.aiWeb ? "on" : "off"}
             </p>
           ) : (
-            <p className="mt-2 text-[11px] text-text-faint">No run yet — hit “Run now” or wait for the daily schedule.</p>
+            <p className="mt-2 text-[11px] text-text-faint">No run yet — hit “Run now” to hunt your watches.</p>
           )}
           {!storeOn && (
-            <p className="mt-1 text-[10px] text-text-faint">Add Vercel KV (Storage tab) to persist finds across runs and enable the daily cron.</p>
+            <p className="mt-1 text-[10px] text-text-faint">Optional: connect a store (Supabase / KV) to remember finds across sessions &amp; skip dupes you&apos;ve seen.</p>
           )}
         </div>
 
@@ -183,8 +186,9 @@ export function AutoPilotPanel({
         </div>
 
         <p className="mt-4 rounded-xl border border-border bg-black/20 p-3 text-[11px] leading-relaxed text-text-dim">
-          With Vercel KV + a <code className="text-text">CRON_SECRET</code>, enabled watches run automatically every day, dedupe against
-          what you&apos;ve seen, and drop new high-ROI, account-safe finds into this inbox (and email them if you add a Resend key).
+          Hit <span className="font-medium text-text">Run now</span> and Auto-Pilot scans every enabled watch (Keepa + web), keeps only
+          new high-ROI, account-safe finds, and drops them in this inbox. Add a store (Supabase / KV) only if you want finds remembered
+          across sessions or scheduled runs.
         </p>
       </aside>
     </div>

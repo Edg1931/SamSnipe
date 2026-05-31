@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import type { Deal } from "@/lib/types";
 import { usd, timeAgo, compact } from "@/lib/format";
 import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
@@ -5,16 +6,24 @@ import { Sparkline } from "./Sparkline";
 import { computeSurvival } from "@/lib/survival";
 import { estimateVelocity } from "@/lib/velocity";
 import { assessTrust } from "@/lib/trust";
+import { resolveSourceUrl, amazonUrl, keepaUrl, amazonSearch } from "@/lib/links";
 
 export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void }) {
   const roiColor = deal.roi >= 40 ? "#10d98e" : deal.roi >= 25 ? "#84cc16" : deal.roi >= 15 ? "#f5a524" : "#f4476b";
   const survival = computeSurvival(deal);
   const v = estimateVelocity(deal);
   const trust = assessTrust(deal);
+  const srcUrl = resolveSourceUrl({ source: deal.source, title: deal.title, sourceUrl: deal.sourceUrl });
+  const azUrl = amazonUrl(deal.match.asin) ?? amazonSearch(`${deal.brand} ${deal.title}`);
+  const keUrl = keepaUrl(deal.match.asin);
+  const stop = (e: MouseEvent) => e.stopPropagation();
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="card-hover animate-rise glass group w-full rounded-2xl border border-border p-4 text-left"
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+      className="card-hover animate-rise glass group w-full cursor-pointer rounded-2xl border border-border p-4 text-left"
     >
       <div className="flex items-start gap-3">
         {deal.imageUrl ? (
@@ -94,7 +103,23 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
         <span className="line-clamp-1 text-[11px] italic text-text-dim">“{deal.verdictReason}”</span>
         <span className="shrink-0 pl-2 text-[10px] text-text-faint">{timeAgo(deal.foundAt)}</span>
       </div>
-    </button>
+
+      {/* Quick verify — check the prices behind the ROI without opening the drawer */}
+      <div className="mt-2 flex items-center gap-2.5 text-[10px] text-text-faint">
+        <span>Verify:</span>
+        <a href={srcUrl} target="_blank" rel="noopener noreferrer" onClick={stop} className="text-accent hover:underline" title={`Buy price on ${deal.source}`}>
+          {deal.source} ↗
+        </a>
+        <a href={azUrl} target="_blank" rel="noopener noreferrer" onClick={stop} className="text-accent hover:underline" title="Sell price on Amazon">
+          Amazon ↗
+        </a>
+        {keUrl && (
+          <a href={keUrl} target="_blank" rel="noopener noreferrer" onClick={stop} className="text-accent hover:underline" title="Price & BSR history on Keepa">
+            Keepa ↗
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 

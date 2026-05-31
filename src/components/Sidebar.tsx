@@ -2,6 +2,7 @@
 
 // Functional left-rail navigation — each item opens the matching view/panel.
 const NAV: { key: string; label: string; icon: string }[] = [
+  { key: "home", label: "Home", icon: "M3 11l9-8 9 8M5 10v10h14V10" },
   { key: "deals", label: "Live Deals", icon: "M3 3h7v7H3V3zm0 11h7v7H3v-7zm11-11h7v7h-7V3zm0 11h7v7h-7v-7z" },
   { key: "autopilot", label: "Auto-Pilot", icon: "M13 2L3 14h7l-1 8 10-12h-7l1-8z" },
   { key: "optimizer", label: "Optimizer", icon: "M3 3v18h18M7 14l3-4 3 3 4-6" },

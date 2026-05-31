@@ -23,7 +23,7 @@ export interface Findings {
 
 const MIN_SAFETY = Number(process.env.AUTOPILOT_MIN_SAFETY || "60");
 
-export async function runAutopilot(opts?: { web?: boolean }): Promise<Findings> {
+export async function runAutopilot(opts?: { web?: boolean }): Promise<{ findings: Findings; inbox: Deal[] }> {
   const watches = (await getJSON<SavedSearch[]>(K.watches, [])).filter((w) => w.enabled);
 
   // Build the candidate pool, frugally.
@@ -60,12 +60,15 @@ export async function runAutopilot(opts?: { web?: boolean }): Promise<Findings> 
     byWatch.push({ name: w.name, count });
   }
 
-  // Persist: cap seen history; prepend fresh finds to the rolling inbox.
+  // Roll fresh finds into the inbox. We always return this inline so "Run now"
+  // shows results even with no durable store (the read-back GET would hit a
+  // different serverless invocation and miss in-memory data).
+  const prevInbox = await getJSON<Deal[]>(K.inbox, []);
+  const inbox = fresh.length ? [...fresh, ...prevInbox].slice(0, 120) : prevInbox;
+
+  // Persist (best-effort): cap seen history; store inbox when a store exists.
   await setJSON(K.seen, [...seen].slice(-3000));
-  if (fresh.length) {
-    const inbox = await getJSON<Deal[]>(K.inbox, []);
-    await setJSON(K.inbox, [...fresh, ...inbox].slice(0, 120));
-  }
+  if (fresh.length) await setJSON(K.inbox, inbox);
 
   const findings: Findings = {
     ranAt: new Date().toISOString(),
@@ -83,7 +86,7 @@ export async function runAutopilot(opts?: { web?: boolean }): Promise<Findings> 
     try { await emailDigest(fresh, findings); } catch { /* best-effort */ }
   }
 
-  return findings;
+  return { findings, inbox };
 }
 
 async function emailDigest(deals: Deal[], f: Findings) {

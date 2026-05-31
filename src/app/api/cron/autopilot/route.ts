@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { runAutopilot } from "@/lib/autopilotRun";
 
-// GET /api/cron/autopilot — scheduled by Vercel Cron (see vercel.json).
-// Vercel sends `Authorization: Bearer <CRON_SECRET>` when CRON_SECRET is set;
-// we verify it so the endpoint can't be triggered by randoms.
+// GET /api/cron/autopilot — endpoint for an optional scheduled run.
+// Auto-Pilot is on-demand by default ("crons": [] in vercel.json). To enable a
+// daily run, add a cron entry pointing here and set CRON_SECRET. When set, Vercel
+// sends `Authorization: Bearer <CRON_SECRET>`; we verify it so randoms can't trigger it.
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (secret) {
@@ -13,6 +14,6 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
   }
-  const findings = await runAutopilot();
+  const { findings } = await runAutopilot();
   return NextResponse.json(findings);
 }

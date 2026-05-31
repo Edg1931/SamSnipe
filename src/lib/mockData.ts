@@ -47,6 +47,20 @@ const PRODUCTS: {
   { title: "Keurig K-Mini Single Serve Brewer", brand: "Keurig", category: "Home & Kitchen", weight: 4.6, color: "#8b5cf6" },
   { title: "Anker 737 Power Bank 24000mAh", brand: "Anker", category: "Electronics", weight: 1.3, color: "#64748b" },
   { title: "Squishmallows 16in Avocado Plush", brand: "Squishmallows", category: "Toys", weight: 1.1, color: "#84cc16" },
+  { title: "Instant Pot Duo 6-Qt Pressure Cooker", brand: "Instant Pot", category: "Home & Kitchen", weight: 11.8, color: "#ef4444" },
+  { title: "Bose QuietComfort Earbuds II", brand: "Bose", category: "Electronics", weight: 0.6, color: "#6366f1" },
+  { title: "Barbie Dreamhouse 2024 Edition", brand: "Barbie", category: "Toys", weight: 14, color: "#ec4899" },
+  { title: "Carhartt Acrylic Watch Hat Beanie", brand: "Carhartt", category: "Sports & Outdoors", weight: 0.3, color: "#a16207" },
+  { title: "Revlon One-Step Volumizer Hair Dryer", brand: "Revlon", category: "Beauty", weight: 1.9, color: "#f43f5e" },
+  { title: "Yeti Rambler 20oz Tumbler", brand: "Yeti", category: "Sports & Outdoors", weight: 0.8, color: "#0ea5e9" },
+  { title: "Hot Wheels 20-Car Gift Pack", brand: "Hot Wheels", category: "Toys", weight: 1.5, color: "#f97316" },
+  { title: "Logitech MX Master 3S Mouse", brand: "Logitech", category: "Electronics", weight: 0.5, color: "#64748b" },
+  { title: "Bissell Little Green Portable Cleaner", brand: "Bissell", category: "Home & Kitchen", weight: 9.5, color: "#22c55e" },
+  { title: "Nerf Elite 2.0 Commander Blaster", brand: "Nerf", category: "Toys", weight: 1.2, color: "#eab308" },
+  { title: "Conair Foot Spa Bath Massager", brand: "Conair", category: "Health & Household", weight: 4.2, color: "#14b8a6" },
+  { title: "Cosori Air Fryer 5.8-Qt", brand: "Cosori", category: "Home & Kitchen", weight: 11, color: "#8b5cf6" },
+  { title: "Fjallraven Kanken Classic Backpack", brand: "Fjallraven", category: "Sports & Outdoors", weight: 1.1, color: "#0d9488" },
+  { title: "L.O.L. Surprise! OMG Fashion Doll", brand: "L.O.L. Surprise", category: "Toys", weight: 0.9, color: "#d946ef" },
 ];
 
 const SITES: SourceSite[] = [
@@ -130,9 +144,17 @@ export function generateDeals(seed = 7, count = 14, targets?: ScanTargets): Deal
   if (targets?.aiSearch) pool.push("AI Web Search");
   if (pool.length === 0) pool.push(...SITES); // default: scan everything
 
+  // Shuffle product indices so each generated deal is a distinct product
+  // (no duplicate cards) up to the catalog size.
+  const order = PRODUCTS.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+
   const deals: Deal[] = [];
   for (let i = 0; i < count; i++) {
-    const prod = PRODUCTS[Math.floor(rng() * PRODUCTS.length)];
+    const prod = PRODUCTS[order[i % PRODUCTS.length]];
     const amazonPrice = +(12 + rng() * 180).toFixed(2);
     const discount = 0.45 + rng() * 0.4; // source is 45–85% of Amazon price
     const sourcePrice = +(amazonPrice * discount).toFixed(2);

@@ -30,7 +30,12 @@ export function parseQuery(q: string): ParsedQuery {
     out.understood.push(`Cost ≤ $${cost[1]}`);
   }
 
-  const roi = text.match(/(\d+)\s*%?\s*(?:\+|plus)?\s*roi/);
+  // Handle both orders: "roi over 40" / "roi ≥ 40%" (number after) and
+  // "40% roi" / "40+ roi" (number before). The number-after form is tried first
+  // so an adjacent cost figure ("$30 roi over 40") isn't mistaken for the ROI.
+  const roi =
+    text.match(/roi\s*(?:of|over|above|at\s*least|min(?:imum)?|>=?|≥|:)?\s*(\d+)/) ||
+    text.match(/(\d+)\s*%?\s*(?:\+|plus)?\s*roi/);
   if (roi) {
     out.minRoi = +roi[1];
     out.understood.push(`ROI ≥ ${roi[1]}%`);

@@ -20,6 +20,7 @@ const KEY = process.env.ANTHROPIC_API_KEY;
 const MODEL = process.env.SAMSNIPE_AI_MODEL || "claude-opus-4-8";
 
 export const aiEnabled = (): boolean => Boolean(KEY);
+export const aiModel = (): string => MODEL;
 
 let _client: Anthropic | null = null;
 function client(): Anthropic {

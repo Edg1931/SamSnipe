@@ -10,6 +10,7 @@ const NAV: { key: string; label: string; icon: string }[] = [
   { key: "scan", label: "Shelf Scan", icon: "M3 7h3l2-2h8l2 2h3v12H3z" },
   { key: "sources", label: "Sources", icon: "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.5 2.5 15 0 18" },
   { key: "approvals", label: "Approvals", icon: "M7.5 15.5a4.5 4.5 0 100-9 4.5 4.5 0 000 9zm3.2-3.2L19 4m-3 0h3v3" },
+  { key: "setup", label: "Setup", icon: "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" },
 ];
 
 export function Sidebar({

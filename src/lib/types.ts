@@ -1,0 +1,83 @@
+// Core domain types for SamSnipe — AI resale deal finder (Amazon US, FBA).
+
+export type SourceSite =
+  | "Walmart"
+  | "Target"
+  | "Home Depot"
+  | "eBay"
+  | "Best Buy"
+  | "Kohl's"
+  | "Liquidation.com"
+  | "Facebook Marketplace"
+  | "Costco";
+
+export type RiskFlag =
+  | "IP_COMPLAINT_RISK"
+  | "GATED_CATEGORY"
+  | "HAZMAT"
+  | "MELTABLE"
+  | "VARIATION_MISMATCH"
+  | "LOW_SELL_THROUGH"
+  | "BUYBOX_SUPPRESSED";
+
+export type Verdict = "BUY" | "WATCH" | "PASS";
+
+/** How a non-Amazon source listing was tied to an Amazon ASIN. */
+export interface AsinMatch {
+  asin: string;
+  /** 0–100. Below ~80 we treat the match as needs-review. */
+  confidence: number;
+  /** What evidence produced the match, best-first. */
+  method: ("UPC_EAN" | "MODEL_NUMBER" | "TITLE_AI" | "IMAGE_AI")[];
+  /** Human-readable reason the AI is or isn't sure. */
+  rationale: string;
+  /** True when source pack size may differ from the ASIN (multipack trap). */
+  packSizeWarning?: boolean;
+}
+
+export interface PricePoint {
+  /** ISO date */
+  t: string;
+  price: number;
+}
+
+export interface Deal {
+  id: string;
+  title: string;
+  brand: string;
+  category: string;
+  imageColor: string; // placeholder swatch until real images are wired
+  match: AsinMatch;
+
+  source: SourceSite;
+  sourceUrl: string;
+  sourcePrice: number; // your cost per unit
+  amazonPrice: number; // current buy-box price
+
+  bsr: number; // Best Sellers Rank in category
+  bsrCategory: string;
+  monthlySales: number; // estimated units/mo
+  offerCount: number; // # of competing FBA/FBM offers
+
+  profit: number; // net profit/unit after fees (computed)
+  roi: number; // % (computed)
+  margin: number; // % (computed)
+  fbaFees: number;
+
+  verdict: Verdict;
+  /** AI-written one-liner explaining the verdict. */
+  verdictReason: string;
+  risks: RiskFlag[];
+
+  priceHistory: PricePoint[];
+  foundAt: string; // ISO timestamp the agent surfaced it
+}
+
+export interface ScanStatus {
+  running: boolean;
+  sitesScanned: number;
+  totalSites: number;
+  productsAnalyzed: number;
+  dealsFound: number;
+  lastRun: string;
+}

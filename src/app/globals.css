@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0a0e14;
+  --bg-elev: #111722;
+  --bg-card: #141b26;
+  --border: #1f2937;
+  --border-soft: #1a2230;
+  --text: #e8edf4;
+  --text-dim: #94a3b8;
+  --text-faint: #64748b;
+  --accent: #10d98e;
+  --accent-dim: #0c9b67;
+  --accent-glow: rgba(16, 217, 142, 0.15);
+  --warn: #f5a524;
+  --danger: #f4476b;
+  --buy: #10d98e;
+  --watch: #f5a524;
+  --pass: #64748b;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-bg-card: var(--bg-card);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(16, 217, 142, 0.08), transparent),
+    radial-gradient(900px 500px at -10% 10%, rgba(99, 102, 241, 0.06), transparent),
+    var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #243044; border-radius: 6px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: #2f3e57; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+.pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-rise { animation: rise 0.4s ease both; }
+
+.glass {
+  background: linear-gradient(180deg, rgba(20, 27, 38, 0.9), rgba(17, 23, 34, 0.9));
+  backdrop-filter: blur(12px);
+}
+
+.card-hover {
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  border-color: #2a3a52;
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+}

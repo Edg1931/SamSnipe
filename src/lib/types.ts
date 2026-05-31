@@ -54,6 +54,12 @@ export interface Deal {
   /** How it entered the app — drives the little origin badge. */
   origin: "scan" | "import" | "web";
   sourceUrl: string;
+  /** Real product image (Keepa) when available; else we render a swatch. */
+  imageUrl?: string;
+  upc?: string;
+  rating?: number; // 0–5
+  reviewCount?: number;
+  avg90?: number; // 90-day average Amazon price
   sourcePrice: number; // your cost per unit
   amazonPrice: number; // current buy-box price
 

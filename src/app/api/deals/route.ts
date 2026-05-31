@@ -19,11 +19,11 @@ export async function GET(req: Request) {
   let deals: Deal[] = [];
   let source: "keepa-live" | "mock" = "mock";
   if (KEEPA_LIVE) {
-    deals = await liveDeals(14);
+    deals = await liveDeals(); // pulls up to SAMSNIPE_DEAL_LIMIT (default 50)
     if (deals.length > 0) source = "keepa-live";
   }
   if (deals.length === 0) {
-    deals = generateDeals(seed, 14, {
+    deals = generateDeals(seed, 24, {
       sites: sites.length ? sites : undefined,
       aiSearch,
     });

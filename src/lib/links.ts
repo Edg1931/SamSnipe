@@ -25,8 +25,23 @@ const NAME_TO_DOMAIN: Record<string, string> = {
 };
 
 export function amazonUrl(asin: string): string | null {
-  if (!asin || asin === "—" || !/^B0/i.test(asin)) return null;
+  if (!asin || asin === "—" || !/^[A-Z0-9]{10}$/i.test(asin)) return null;
   return `https://www.amazon.com/dp/${asin}`;
+}
+
+/** Keepa's authoritative price/BSR history page for an ASIN (domain 1 = US). */
+export function keepaUrl(asin: string): string | null {
+  if (!asin || asin === "—" || !/^[A-Z0-9]{10}$/i.test(asin)) return null;
+  return `https://keepa.com/#!product/1-${asin}`;
+}
+
+export function amazonSearch(q: string): string {
+  return `https://www.amazon.com/s?k=${encodeURIComponent(q)}`;
+}
+
+/** Amazon Best Sellers for a department — the page BSR is measured against. */
+export function amazonBestSellers(category: string): string {
+  return `https://www.amazon.com/Best-Sellers/zgbs?k=${encodeURIComponent(category)}`;
 }
 
 export function sourceSearchUrl(source: string, title: string): string {

@@ -10,7 +10,7 @@ import { computeSaturation, SATURATION_COLOR } from "@/lib/saturation";
 import { computeUngating, type Approvals } from "@/lib/ungating";
 import { channelOptions } from "@/lib/channels";
 import type { RetailOffer } from "@/lib/retail";
-import { resolveSourceUrl, amazonUrl, keepaUrl, amazonSearch } from "@/lib/links";
+import { resolveSourceUrl, amazonUrl, keepaUrl, amazonSearch, channelUrl } from "@/lib/links";
 import { assessTrust } from "@/lib/trust";
 import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
 import { Sparkline } from "./Sparkline";
@@ -319,12 +319,12 @@ export function DealDetail({
                     <span className="flex items-center gap-3">
                       <span className="font-medium text-text">{usd(o.price)}</span>
                       <span className="w-12 text-right font-mono" style={{ color: op.roi >= 30 ? "#10d98e" : op.roi >= 15 ? "#f5a524" : "#f4476b" }}>{op.roi}%</span>
-                      <a href={o.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-accent">↗</a>
+                      <a href={o.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-accent" title={`Verify this price on ${o.retailer}`}>↗</a>
                     </span>
                   </div>
                 );
               })}
-              <p className="pt-1 text-[10px] text-text-faint">Tap a retailer to price the calculator against that source.</p>
+              <p className="pt-1 text-[10px] text-text-faint">Tap a row to price the calculator against that source · ↗ opens the retailer to verify the price.</p>
             </div>
           ) : (
             <p className="text-[11px] text-text-dim">No retailer matches found — verify the item manually.</p>
@@ -371,11 +371,18 @@ export function DealDetail({
                   <span className="text-text-dim">{usd(ch.estPrice)}</span>
                   <span className="font-mono" style={{ color: ch.netProfit > 0 ? "#10d98e" : "#f4476b" }}>{usd(ch.netProfit)}</span>
                   <span className="w-12 text-right font-mono text-text-dim">{ch.roi}%</span>
+                  <a
+                    href={channelUrl(ch.channel, { asin: deal.match.asin, title: deal.title, brand: deal.brand })}
+                    target="_blank" rel="noopener noreferrer"
+                    className="text-accent"
+                    title={ch.channel === "eBay" ? `Verify on ${ch.channel} (sold comps)` : `Verify price on ${ch.channel}`}
+                  >↗</a>
                 </span>
               </div>
             ))}
           </div>
           <p className="mt-2 text-[11px] leading-snug text-text-dim">{best.note}</p>
+          <p className="mt-1 text-[10px] text-text-faint">↗ opens that marketplace to verify the sell price — eBay shows sold/completed listings (real comps).</p>
         </div>
 
         {/* Risks */}

@@ -64,3 +64,40 @@ export function resolveSourceUrl(opts: {
   if (sourceUrl && /^https?:\/\//i.test(sourceUrl)) return sourceUrl;
   return sourceSearchUrl(source, title);
 }
+
+/** Home page of a retailer domain — for verifying a source site is what you expect. */
+export function storeHomeUrl(domain: string): string {
+  const d = domain.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+  return `https://${d}`;
+}
+
+/**
+ * Verification link for a resale (exit) channel: opens that marketplace's
+ * listings for this product so you can confirm the estimated sell price.
+ * eBay deep-links to SOLD/completed listings — the gold standard for comps.
+ */
+export function channelUrl(
+  channel: string,
+  opts: { asin?: string; title: string; brand?: string }
+): string {
+  // Prepend the brand only when the title doesn't already include it.
+  const brand = opts.brand?.trim() ?? "";
+  const term = brand && !opts.title.toLowerCase().includes(brand.toLowerCase())
+    ? `${brand} ${opts.title}`.trim()
+    : opts.title.trim();
+  const q = encodeURIComponent(term);
+  switch (channel) {
+    case "Amazon":
+      return (opts.asin && amazonUrl(opts.asin)) || amazonSearch(term);
+    case "eBay":
+      return `https://www.ebay.com/sch/i.html?_nkw=${q}&LH_Sold=1&LH_Complete=1`;
+    case "Walmart":
+      return `https://www.walmart.com/search?q=${q}`;
+    case "Mercari":
+      return `https://www.mercari.com/search/?keyword=${q}`;
+    case "TikTok Shop":
+      return `https://www.tiktok.com/search/shop?q=${q}`;
+    default:
+      return amazonSearch(term);
+  }
+}

@@ -22,7 +22,9 @@ export const KEEPA_LIVE = Boolean(KEY) && process.env.KEEPA_LIVE !== "0";
 // Deal endpoint is empty or unavailable on the plan.
 const BESTSELLER_CATS = [165793011, 172282, 1055398, 3375251, 3760901, 3760911];
 
-const DEAL_LIMIT = Math.max(1, Math.min(150, Number(process.env.SAMSNIPE_DEAL_LIMIT || "50")));
+// Default kept low because Keepa charges tokens per product; raise it only on a
+// plan with a healthy refill rate (SAMSNIPE_DEAL_LIMIT).
+const DEAL_LIMIT = Math.max(1, Math.min(150, Number(process.env.SAMSNIPE_DEAL_LIMIT || "12")));
 const COST_RATIO = Number(process.env.SAMSNIPE_COST_RATIO || "0.6");
 
 // --- Keepa encoding helpers -------------------------------------------------
@@ -165,8 +167,11 @@ export async function getProducts(asins: string[]): Promise<KeepaProduct[]> {
   const out: KeepaProduct[] = [];
   for (let i = 0; i < asins.length; i += 100) {
     const batch = asins.slice(i, i + 100).join(",");
+    // Token-frugal: stats + history only. We deliberately skip the expensive
+    // `offers` and `buybox` params (each costs several Keepa tokens per ASIN);
+    // current price falls back to NEW, offer count to the basic field.
     const data = (await keepaFetch(
-      `/product?key=${KEY}&domain=1&asin=${batch}&stats=1&history=1&buybox=1&offers=20&rating=1`
+      `/product?key=${KEY}&domain=1&asin=${batch}&stats=1&history=1`
     )) as { products?: KeepaProductRaw[] } | null;
     for (const raw of data?.products ?? []) {
       const mapped = mapProduct(raw);
@@ -283,7 +288,7 @@ function buildFromCandidate(c: DiscoveredDeal, kp: KeepaProduct | null, i: numbe
 // surface as many candidates as the deal limit asks for.
 async function findDealAsins(limit: number): Promise<string[]> {
   const asins: string[] = [];
-  for (let page = 0; page < 5 && asins.length < limit; page++) {
+  for (let page = 0; page < 2 && asins.length < limit; page++) {
     const selection = {
       page,
       domainId: 1,

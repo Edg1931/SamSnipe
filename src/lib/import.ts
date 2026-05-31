@@ -4,11 +4,12 @@
 
 import { calcProfit } from "./profit";
 import { decideVerdict, swatchFor } from "./verdict";
+import { analyzeManifest, type ManifestAnalysis } from "./manifest";
 import type { AsinMatch, Deal, RiskFlag } from "./types";
 
 export type Field =
   | "asin" | "upc" | "title" | "brand" | "category"
-  | "cost" | "sell" | "bsr" | "url";
+  | "cost" | "sell" | "bsr" | "url" | "qty";
 
 // Header synonyms — lowercased, non-alphanumerics stripped before matching.
 const SYNONYMS: Record<Field, string[]> = {
@@ -21,6 +22,7 @@ const SYNONYMS: Record<Field, string[]> = {
   sell: ["sell", "sellprice", "saleprice", "amazonprice", "listprice", "price", "buyboxprice", "retail", "retailprice", "currentprice"],
   bsr: ["bsr", "rank", "salesrank", "bestsellersrank", "bestsellerrank"],
   url: ["url", "link", "sourceurl", "producturl", "productlink", "listingurl", "href", "weblink"],
+  qty: ["qty", "quantity", "units", "cases", "casepack", "count", "pcs", "pieces"],
 };
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -91,6 +93,10 @@ export interface ImportResult {
   columnMap: ColumnMap;
   rowsRead: number;
   skipped: number;
+  /** Per-line quantities (aligned with `deals`), defaulting to 1. */
+  quantities: number[];
+  /** Pallet-level analysis — present when a quantity column is detected. */
+  manifest?: ManifestAnalysis;
 }
 
 export function rowsToDeals(rows: Record<string, unknown>[], sourceLabel = "Imported"): ImportResult {
@@ -98,6 +104,7 @@ export function rowsToDeals(rows: Record<string, unknown>[], sourceLabel = "Impo
   const columnMap = detectColumns(headers);
   const m = columnMap.mapping;
   const deals: Deal[] = [];
+  const quantities: number[] = [];
   let skipped = 0;
 
   rows.forEach((row, i) => {
@@ -117,6 +124,7 @@ export function rowsToDeals(rows: Record<string, unknown>[], sourceLabel = "Impo
     const category = String((m.category && row[m.category]) ?? "Home & Kitchen").trim();
     const bsr = m.bsr ? Math.max(1, Math.round(num(row[m.bsr]))) : 120000;
     const url = String((m.url && row[m.url]) ?? "").trim();
+    const qty = m.qty ? Math.max(1, Math.round(num(row[m.qty]))) : 1;
 
     const { profit, roi, margin, totalFees } = calcProfit({ cost, sellPrice: sell, category });
     const match = buildMatch(asin, upc, title || brand);
@@ -153,9 +161,15 @@ export function rowsToDeals(rows: Record<string, unknown>[], sourceLabel = "Impo
       priceHistory: flatHistory(sell),
       foundAt: new Date().toISOString(),
     });
+    quantities.push(qty);
   });
 
-  return { deals, columnMap, rowsRead: rows.length, skipped };
+  // If the sheet carries quantities, treat it as a pallet manifest and score it.
+  const manifest = m.qty
+    ? analyzeManifest(deals.map((deal, i) => ({ deal, qty: quantities[i] ?? 1 })))
+    : undefined;
+
+  return { deals, columnMap, rowsRead: rows.length, skipped, quantities, manifest };
 }
 
 // Imported rows have no history yet; show a flat line at the listed price.

@@ -19,7 +19,7 @@ export const IP_RISK_BRANDS = new Set(
 );
 
 // Categories Amazon commonly gates or that carry compliance overhead.
-const GATED_CATEGORIES = new Set([
+export const GATED_CATEGORIES = new Set([
   "Beauty", "Health & Household", "Grocery", "Toys", // Toys gates seasonally
 ]);
 

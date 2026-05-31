@@ -4,20 +4,38 @@ import { useRef, useState } from "react";
 import type { Deal } from "@/lib/types";
 import type { Field } from "@/lib/import";
 
+interface ManifestAnalysis {
+  units: number; lines: number; profitableLines: number;
+  cost: number; revenue: number; profit: number; roi: number;
+  maxBid: number; verdict: "BUY" | "WATCH" | "PASS"; note: string;
+}
 interface ImportResponse {
   deals: Deal[];
   columnMap: { mapping: Record<Field, string | null>; unmatched: string[] };
   rowsRead: number;
   skipped: number;
   fileName: string;
+  manifest?: ManifestAnalysis;
   error?: string;
 }
+
+const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+const VERDICT_TONE: Record<string, string> = { BUY: "#10d98e", WATCH: "#f5a524", PASS: "#f4476b" };
 
 const FIELD_LABELS: Record<Field, string> = {
   asin: "ASIN", upc: "UPC / EAN", title: "Title", brand: "Brand",
   category: "Category", cost: "Your cost", sell: "Sell price", bsr: "BSR",
-  url: "Source URL",
+  url: "Source URL", qty: "Quantity",
 };
+
+function PalletStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="rounded-lg bg-black/30 p-1.5">
+      <div className="text-[9px] uppercase tracking-wide text-text-faint">{label}</div>
+      <div className="text-[12px] font-bold" style={{ color: tone ?? "#e8edf4" }}>{value}</div>
+    </div>
+  );
+}
 
 // Upload an Excel/CSV, auto-map columns, preview, then push rows into the feed.
 export function ImportModal({ onImport, onClose }: { onImport: (deals: Deal[]) => void; onClose: () => void }) {
@@ -100,6 +118,28 @@ export function ImportModal({ onImport, onClose }: { onImport: (deals: Deal[]) =
                 {result.deals.length} ready · {result.skipped} skipped of {result.rowsRead} rows
               </span>
             </div>
+
+            {result.manifest && (
+              <div
+                className="mt-3 rounded-xl border p-3"
+                style={{ borderColor: `${VERDICT_TONE[result.manifest.verdict]}40`, background: `${VERDICT_TONE[result.manifest.verdict]}0d` }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: VERDICT_TONE[result.manifest.verdict] }}>
+                    📦 Pallet analysis · {result.manifest.verdict}
+                  </span>
+                  <span className="text-[11px] text-text-dim">{result.manifest.units} units · {result.manifest.profitableLines}/{result.manifest.lines} lines profitable</span>
+                </div>
+                <div className="mt-2 grid grid-cols-4 gap-2 text-center">
+                  <PalletStat label="Cost" value={usd(result.manifest.cost)} />
+                  <PalletStat label="Resale" value={usd(result.manifest.revenue)} />
+                  <PalletStat label="Profit" value={usd(result.manifest.profit)} tone="#10d98e" />
+                  <PalletStat label="ROI" value={`${result.manifest.roi}%`} tone={VERDICT_TONE[result.manifest.verdict]} />
+                </div>
+                <p className="mt-2 text-[11px] leading-snug text-text">{result.manifest.note}</p>
+                <p className="mt-1 text-[11px] font-semibold text-accent">Suggested max bid: {usd(result.manifest.maxBid)}</p>
+              </div>
+            )}
 
             <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-text-dim">Detected columns</div>
             <div className="mt-2 grid grid-cols-2 gap-1.5">

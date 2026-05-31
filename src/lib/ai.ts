@@ -194,6 +194,65 @@ export async function extractInvoice(
   }
 }
 
+// --- #10 In-store shelf scanning (Claude vision) ---
+export interface ScannedProduct {
+  name: string;
+  brand: string;
+  category: string;
+  note: string;
+}
+
+const SHELF_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    products: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          name: { type: "string" },
+          brand: { type: "string" },
+          category: { type: "string" },
+          note: { type: "string" },
+        },
+        required: ["name", "brand", "category", "note"],
+      },
+    },
+  },
+  required: ["products"],
+} as const;
+
+export async function scanShelf(
+  base64: string,
+  mediaType: string
+): Promise<{ products: ScannedProduct[]; source: "ai" | "offline" }> {
+  if (!aiEnabled()) return { products: [], source: "offline" };
+  try {
+    const res = await client().messages.create({
+      model: MODEL,
+      max_tokens: 1500,
+      thinking: { type: "disabled" },
+      system: [{ type: "text", text: "You are an in-store sourcing assistant. Identify the distinct retail products visible on the shelf in this photo. For each, give the product name, brand, a best-guess Amazon category, and a one-line note on resale potential or anything notable (clearance sticker, multipack, etc.). Only list products you can actually see." }],
+      output_config: { format: { type: "json_schema", schema: SHELF_SCHEMA } },
+      messages: [{
+        role: "user",
+        content: [
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } } as any,
+          { type: "text", text: "Identify the products on this shelf." },
+        ],
+      }],
+    });
+    const block = res.content.find((b) => b.type === "text");
+    const p = JSON.parse((block as { text: string }).text);
+    return { products: p.products ?? [], source: "ai" };
+  } catch {
+    return { products: [], source: "offline" };
+  }
+}
+
 export interface CopilotTurn {
   role: "user" | "assistant";
   content: string;

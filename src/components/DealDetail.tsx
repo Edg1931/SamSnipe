@@ -6,6 +6,9 @@ import { usd, compact, RISK_LABELS } from "@/lib/format";
 import { calcProfit } from "@/lib/profit";
 import { estimateVelocity } from "@/lib/velocity";
 import { computeSurvival, SURVIVAL_COLOR } from "@/lib/survival";
+import { computeSaturation, SATURATION_COLOR } from "@/lib/saturation";
+import { computeUngating, type Approvals } from "@/lib/ungating";
+import { channelOptions } from "@/lib/channels";
 import { resolveSourceUrl, amazonUrl } from "@/lib/links";
 import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
 import { Sparkline } from "./Sparkline";
@@ -22,11 +25,12 @@ interface AIVerdict {
 // Slide-over: full deal breakdown, live AI analysis, sell-through model,
 // what-if profit calculator, real outbound links, and buy-list actions.
 export function DealDetail({
-  deal, inBuyList, exempted, onClose, onAddToBuyList, onPass, onExemptBrand,
+  deal, inBuyList, exempted, approvals, onClose, onAddToBuyList, onPass, onExemptBrand,
 }: {
   deal: Deal;
   inBuyList: boolean;
   exempted: boolean;
+  approvals: Approvals;
   onClose: () => void;
   onAddToBuyList: (deal: Deal) => void;
   onPass: (deal: Deal) => void;
@@ -37,6 +41,10 @@ export function DealDetail({
   const p = calcProfit({ cost, sellPrice: sell, category: deal.category });
   const v = estimateVelocity(deal);
   const survival = computeSurvival(deal);
+  const saturation = computeSaturation(deal);
+  const ungating = computeUngating(deal, approvals);
+  const channels = channelOptions(deal);
+  const best = channels[0];
 
   const [ai, setAi] = useState<AIVerdict | null>(null);
   const [aiLoading, setAiLoading] = useState(true);
@@ -128,6 +136,18 @@ export function DealDetail({
           )}
         </div>
 
+        {/* Ungating status */}
+        <div className="mt-3 flex items-start gap-2 rounded-xl border border-border bg-black/20 p-2.5">
+          <span
+            className="mt-0.5 h-2 w-2 shrink-0 rounded-full"
+            style={{ background: ungating.status === "open" ? "#10d98e" : ungating.status === "approved" ? "#10d98e" : ungating.canUngate ? "#f5a524" : "#f4476b" }}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-[12px] font-medium text-text">{ungating.label}</div>
+            <p className="text-[11px] leading-snug text-text-dim">{ungating.note}</p>
+          </div>
+        </div>
+
         {/* AI analysis */}
         <div className="mt-4 rounded-xl border border-accent/20 bg-accent/5 p-3">
           <div className="mb-1 flex items-center justify-between">
@@ -176,6 +196,12 @@ export function DealDetail({
           <p className="mt-2 text-[11px] leading-snug text-text-dim">
             {v.note} Price trend: <span className="text-text">{v.trend}</span>.
           </p>
+          <div className="mt-2 flex items-start gap-1.5 border-t border-border-soft pt-2">
+            <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full" style={{ background: SATURATION_COLOR[saturation.level] }} />
+            <p className="text-[11px] leading-snug text-text-dim">
+              <span className="font-medium capitalize" style={{ color: SATURATION_COLOR[saturation.level] }}>{saturation.level}</span> · {saturation.note}
+            </p>
+          </div>
         </div>
 
         {/* Price history */}
@@ -203,6 +229,30 @@ export function DealDetail({
             <Row label="ROI" value={`${p.roi}%`} strong color={p.roi >= 30 ? "#10d98e" : "#f5a524"} />
             <Row label="Margin" value={`${p.margin}%`} />
           </div>
+        </div>
+
+        {/* Multi-channel exits */}
+        <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
+          <div className="mb-2 flex items-center justify-between text-[11px]">
+            <span className="font-semibold uppercase tracking-wide text-text-dim">Best exit channel</span>
+            <span className="text-text-dim">winner: <span className="font-semibold text-accent">{best.channel}</span></span>
+          </div>
+          <div className="space-y-1">
+            {channels.map((ch, i) => (
+              <div
+                key={ch.channel}
+                className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${i === 0 ? "bg-accent/10" : "bg-black/20"}`}
+              >
+                <span className={i === 0 ? "font-semibold text-text" : "text-text-dim"}>{ch.channel}</span>
+                <span className="flex items-center gap-3">
+                  <span className="text-text-dim">{usd(ch.estPrice)}</span>
+                  <span className="font-mono" style={{ color: ch.netProfit > 0 ? "#10d98e" : "#f4476b" }}>{usd(ch.netProfit)}</span>
+                  <span className="w-12 text-right font-mono text-text-dim">{ch.roi}%</span>
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-snug text-text-dim">{best.note}</p>
         </div>
 
         {/* Risks */}

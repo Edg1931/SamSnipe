@@ -14,6 +14,9 @@ import { Copilot } from "@/components/Copilot";
 import { ApprovalsPanel } from "@/components/ApprovalsPanel";
 import { OptimizerModal } from "@/components/OptimizerModal";
 import { ScanModal } from "@/components/ScanModal";
+import { AutoPilotPanel } from "@/components/AutoPilotPanel";
+import type { SavedSearch } from "@/lib/autopilot";
+import { loadSearches, saveSearches } from "@/lib/autopilot";
 import type { TargetSite } from "@/lib/sources";
 import { DEFAULT_SITES, loadSources, saveSources, loadAiSearch, saveAiSearch } from "@/lib/sources";
 import { loadExemptBrands, saveExemptBrands, isExempt } from "@/lib/brands";
@@ -71,19 +74,28 @@ export default function Home() {
   const [showApprovals, setShowApprovals] = useState(false);
   const [showOptimizer, setShowOptimizer] = useState(false);
   const [showScan, setShowScan] = useState(false);
+  const [searches, setSearches] = useState<SavedSearch[]>([]);
+  const [showAutoPilot, setShowAutoPilot] = useState(false);
 
   async function load(q: string, s: number, opts?: { sites?: TargetSite[]; ai?: boolean }) {
     setLoading(true);
-    const activeSites = (opts?.sites ?? sites).filter((x) => x.enabled).map((x) => x.domain);
-    const ai = (opts?.ai ?? aiSearch) ? "1" : "0";
-    const params = new URLSearchParams({ q, seed: String(s), sites: activeSites.join(","), ai });
-    const res = await fetch(`/api/deals?${params.toString()}`);
-    const data = await res.json();
-    setDeals(data.deals);
-    setUnderstood(data.parsed?.understood ?? []);
-    setDataSource(data.dataSource);
-    setAiOn(Boolean(data.ai));
-    setLoading(false);
+    try {
+      const activeSites = (opts?.sites ?? sites).filter((x) => x.enabled).map((x) => x.domain);
+      const ai = (opts?.ai ?? aiSearch) ? "1" : "0";
+      const params = new URLSearchParams({ q, seed: String(s), sites: activeSites.join(","), ai });
+      const res = await fetch(`/api/deals?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      // Defensive: never let a bad response put non-arrays into state (which
+      // would throw on every subsequent render and kill all interactivity).
+      setDeals(Array.isArray(data.deals) ? data.deals : []);
+      setUnderstood(Array.isArray(data.parsed?.understood) ? data.parsed.understood : []);
+      setDataSource(data.dataSource ?? "mock");
+      setAiOn(Boolean(data.ai));
+    } catch {
+      setDeals([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -95,6 +107,7 @@ export default function Home() {
     const bl = loadBuyList();
     const ap = loadApprovals();
     const dec = loadDecisions();
+    const sx = loadSearches();
     const id = setTimeout(() => {
       setSites(s);
       setAiSearch(ai);
@@ -102,6 +115,7 @@ export default function Home() {
       setBuyList(bl);
       setApprovals(ap);
       setDecisions(dec);
+      setSearches(sx);
       load("", seed, { sites: s, ai });
     }, 0);
     return () => clearTimeout(id);
@@ -111,6 +125,15 @@ export default function Home() {
   function updateApprovals(a: Approvals) {
     setApprovals(a);
     saveApprovals(a);
+  }
+  function updateSearches(s: SavedSearch[]) {
+    setSearches(s);
+    saveSearches(s);
+  }
+  function runWatch(q: string) {
+    setQuery(q);
+    setShowAutoPilot(false);
+    load(q, seed);
   }
   function record(deal: Deal, action: "buy" | "pass") {
     const next = recordDecision(decisions, deal, action);
@@ -251,6 +274,7 @@ export default function Home() {
 
           {/* Tool toolbar */}
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <Tool onClick={() => setShowAutoPilot(true)} icon={<BoltIcon />} label="Auto-Pilot" badge={searches.filter((s) => s.enabled).length || undefined} />
             <Tool onClick={() => setShowSources(true)} icon={<GlobeIcon />} label="Sources" badge={String(sites.filter((s) => s.enabled).length + (aiSearch ? 1 : 0))} />
             <Tool onClick={() => setShowApprovals(true)} icon={<KeyIcon />} label="Approvals" badge={approvals.brands.length + approvals.categories.length || undefined} />
             <Tool onClick={() => setShowBrands(true)} icon={<TagIcon />} label="Exempt" badge={exemptBrands.length || undefined} danger />
@@ -457,6 +481,16 @@ export default function Home() {
       )}
 
       {showScan && <ScanModal aiOn={aiOn} onClose={() => setShowScan(false)} />}
+
+      {showAutoPilot && (
+        <AutoPilotPanel
+          searches={searches}
+          deals={allDeals}
+          onChange={updateSearches}
+          onRun={runWatch}
+          onClose={() => setShowAutoPilot(false)}
+        />
+      )}
     </div>
   );
 }
@@ -589,6 +623,14 @@ function SparkIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
       <path d="M12 2l2.4 6.9L21 11l-6.6 2.1L12 20l-2.4-6.9L3 11l6.6-2.1L12 2z" />
+    </svg>
+  );
+}
+
+function BoltIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" />
     </svg>
   );
 }

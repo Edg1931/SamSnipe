@@ -254,11 +254,24 @@ export default function Home() {
     }, 1400);
   }
 
-  // Imported rows live alongside scanned deals; combined feed is ROI-ranked.
-  const combined = useMemo(
-    () => [...imported, ...deals].sort((a, b) => b.roi - a.roi),
-    [imported, deals]
-  );
+  // Imported rows live alongside scanned deals; combined feed is ROI-ranked and
+  // de-duplicated (by ASIN, else title+source) so the same product never shows
+  // twice — keeping the highest-ROI instance.
+  const combined = useMemo(() => {
+    const sorted = [...imported, ...deals].sort((a, b) => b.roi - a.roi);
+    const seen = new Set<string>();
+    const out: Deal[] = [];
+    for (const d of sorted) {
+      const key =
+        d.match.asin && d.match.asin !== "—"
+          ? `asin:${d.match.asin}`
+          : `t:${d.title.trim().toLowerCase()}|${d.source.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(d);
+    }
+    return out;
+  }, [imported, deals]);
 
   // Drop any deal whose brand is on the exemption blocklist.
   const allDeals = useMemo(

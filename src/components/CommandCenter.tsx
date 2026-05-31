@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import type { Deal } from "@/lib/types";
 import { usd } from "@/lib/format";
 import { dealScore } from "@/lib/score";
-import { computeSurvival } from "@/lib/survival";
 import { assessTrust } from "@/lib/trust";
 import { DealCard } from "./DealCard";
 
@@ -24,17 +23,18 @@ export function CommandCenter({
   onDiscover: () => void;
   onOpenAutoPilot: () => void;
 }) {
-  // Today's best buys: BUY + account-safe, ranked by Deal Score, verified first.
-  const best = useMemo(() => {
-    return [...deals]
-      .filter((d) => d.verdict === "BUY" && computeSurvival(d).score >= 60)
-      .sort((a, b) => {
-        const av = assessTrust(a).level === "verified" ? 1 : 0;
-        const bv = assessTrust(b).level === "verified" ? 1 : 0;
-        if (av !== bv) return bv - av;
-        return dealScore(b).score - dealScore(a).score;
-      })
-      .slice(0, 6);
+  // Show every deal, ranked best-first: Keepa-verified, then BUY-grade, then
+  // Deal Score — so the strongest buys lead but nothing is hidden.
+  const ranked = useMemo(() => {
+    return [...deals].sort((a, b) => {
+      const av = assessTrust(a).level === "verified" ? 1 : 0;
+      const bv = assessTrust(b).level === "verified" ? 1 : 0;
+      if (av !== bv) return bv - av;
+      const aBuy = a.verdict === "BUY" ? 1 : 0;
+      const bBuy = b.verdict === "BUY" ? 1 : 0;
+      if (aBuy !== bBuy) return bBuy - aBuy;
+      return dealScore(b).score - dealScore(a).score;
+    });
   }, [deals]);
 
   const stats = useMemo(() => {
@@ -49,7 +49,7 @@ export function CommandCenter({
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   return (
-    <div className="px-5 py-5">
+    <div className="px-5 py-5 pb-24 lg:pb-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-text">{greeting} — today&apos;s sourcing</h1>
@@ -90,21 +90,21 @@ export function CommandCenter({
         </button>
       )}
 
-      {/* Today's best buys */}
+      {/* Today's deals — best first */}
       <div className="mt-6 flex items-center justify-between">
-        <h2 className="text-[15px] font-semibold text-text">Today&apos;s best buys</h2>
-        <button onClick={onSeeAll} className="text-[12px] font-medium text-accent hover:underline">See all {stats.found} deals →</button>
+        <h2 className="text-[15px] font-semibold text-text">Today&apos;s deals · {stats.found} found <span className="font-normal text-text-faint">— best first</span></h2>
+        <button onClick={onSeeAll} className="text-[12px] font-medium text-accent hover:underline">Open full feed (filters, table) →</button>
       </div>
 
-      {best.length === 0 ? (
+      {ranked.length === 0 ? (
         <div className="mt-4 grid place-items-center rounded-2xl border border-dashed border-border py-16 text-center">
           <div className="text-3xl">🎯</div>
-          <p className="mt-2 text-sm font-medium text-text">No BUY-grade deals yet</p>
+          <p className="mt-2 text-sm font-medium text-text">No deals yet</p>
           <p className="text-[12px] text-text-dim">Run a scan or AI Discover to surface fresh, high-ROI finds.</p>
         </div>
       ) : (
         <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {best.map((d) => (
+          {ranked.map((d) => (
             <DealCard key={d.id} deal={d} onClick={() => onOpenDeal(d)} />
           ))}
         </div>

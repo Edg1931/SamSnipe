@@ -15,12 +15,17 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
       className="card-hover animate-rise glass group w-full rounded-2xl border border-border p-4 text-left"
     >
       <div className="flex items-start gap-3">
-        <div
-          className="grid h-14 w-14 shrink-0 place-items-center rounded-xl text-lg font-bold text-white/90"
-          style={{ background: `linear-gradient(135deg, ${deal.imageColor}, ${deal.imageColor}99)` }}
-        >
-          {deal.brand.slice(0, 2)}
-        </div>
+        {deal.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={deal.imageUrl} alt={deal.title} className="h-14 w-14 shrink-0 rounded-xl bg-white/5 object-contain p-1" />
+        ) : (
+          <div
+            className="grid h-14 w-14 shrink-0 place-items-center rounded-xl text-lg font-bold text-white/90"
+            style={{ background: `linear-gradient(135deg, ${deal.imageColor}, ${deal.imageColor}99)` }}
+          >
+            {deal.brand.slice(0, 2)}
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-[13px] font-semibold text-text">{deal.title}</span>

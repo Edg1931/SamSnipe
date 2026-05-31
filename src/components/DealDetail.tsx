@@ -10,7 +10,7 @@ import { computeSaturation, SATURATION_COLOR } from "@/lib/saturation";
 import { computeUngating, type Approvals } from "@/lib/ungating";
 import { channelOptions } from "@/lib/channels";
 import type { RetailOffer } from "@/lib/retail";
-import { resolveSourceUrl, amazonUrl } from "@/lib/links";
+import { resolveSourceUrl, amazonUrl, keepaUrl, amazonSearch } from "@/lib/links";
 import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
 import { Sparkline } from "./Sparkline";
 
@@ -90,8 +90,10 @@ export function DealDetail({
     return () => { live = false; clearTimeout(id); };
   }, [deal]);
 
-  const azUrl = amazonUrl(deal.match.asin);
+  const azUrl = amazonUrl(deal.match.asin) ?? amazonSearch(`${deal.brand} ${deal.title}`);
+  const keUrl = keepaUrl(deal.match.asin);
   const srcUrl = resolveSourceUrl({ source: deal.source, title: deal.title, sourceUrl: deal.sourceUrl });
+  const isLive = deal.origin === "web" && deal.match.confidence === 100;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -99,15 +101,25 @@ export function DealDetail({
       <aside className="glass animate-rise relative h-full w-full max-w-md overflow-y-auto border-l border-border p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div
-              className="grid h-12 w-12 place-items-center rounded-xl font-bold text-white/90"
-              style={{ background: `linear-gradient(135deg, ${deal.imageColor}, ${deal.imageColor}99)` }}
-            >
-              {deal.brand.slice(0, 2)}
-            </div>
+            <a href={azUrl} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Open on Amazon">
+              {deal.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={deal.imageUrl} alt={deal.title} className="h-12 w-12 rounded-xl bg-white/5 object-contain p-1" />
+              ) : (
+                <div className="grid h-12 w-12 place-items-center rounded-xl font-bold text-white/90" style={{ background: `linear-gradient(135deg, ${deal.imageColor}, ${deal.imageColor}99)` }}>
+                  {deal.brand.slice(0, 2)}
+                </div>
+              )}
+            </a>
             <div>
-              <h2 className="text-sm font-semibold leading-tight text-text">{deal.title}</h2>
-              <p className="text-[11px] text-text-dim">{deal.brand} · {deal.category}</p>
+              <a href={azUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold leading-tight text-text hover:text-accent">
+                {deal.title}
+              </a>
+              <p className="text-[11px] text-text-dim">
+                <a href={amazonSearch(deal.brand)} target="_blank" rel="noopener noreferrer" className="hover:text-accent">{deal.brand}</a>
+                {" · "}{deal.category}
+                {deal.rating ? <> · ★ {deal.rating}{deal.reviewCount ? ` (${deal.reviewCount.toLocaleString()})` : ""}</> : null}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-text-dim hover:bg-white/5 hover:text-text">✕</button>
@@ -117,11 +129,21 @@ export function DealDetail({
           <div className="flex items-center gap-3">
             <ConfidenceRing match={deal.match} size={52} />
             <div>
-              <div className="font-mono text-sm text-accent">{deal.match.asin}</div>
+              <a href={azUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-sm text-accent hover:underline">
+                {deal.match.asin} ↗
+              </a>
               <div className="text-[11px] text-text-dim">via {deal.match.method.join(" + ")}</div>
             </div>
           </div>
           <VerdictBadge verdict={deal.verdict} />
+        </div>
+
+        {/* Data source / accuracy */}
+        <div className="mt-2 flex items-center gap-1.5 text-[11px]">
+          <span className={`h-1.5 w-1.5 rounded-full ${isLive ? "bg-accent" : "bg-warn"}`} />
+          <span className="text-text-dim">
+            {isLive ? "Live Keepa data — real ASIN, price & history." : "Demo data — illustrative numbers; connect Keepa for real ASINs & links."}
+          </span>
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-text-dim">{deal.match.rationale}</p>
 
@@ -230,8 +252,12 @@ export function DealDetail({
         {/* Price history */}
         <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
           <div className="mb-2 flex items-center justify-between text-[11px] text-text-dim">
-            <span>90-day Amazon price</span>
-            <span>BSR #{compact(deal.bsr)} · {deal.offerCount} offers</span>
+            {keUrl ? (
+              <a href={keUrl} target="_blank" rel="noopener noreferrer" className="hover:text-accent">90-day price history · Keepa ↗</a>
+            ) : (
+              <span>90-day price history</span>
+            )}
+            <span>{deal.avg90 ? `avg ${usd(deal.avg90)} · ` : ""}{deal.offerCount} offers</span>
           </div>
           <Sparkline data={deal.priceHistory} width={380} height={90} color={deal.imageColor} />
         </div>
@@ -335,23 +361,27 @@ export function DealDetail({
           </div>
         )}
 
-        {/* Links */}
-        <div className="mt-5 grid grid-cols-2 gap-2">
+        {/* Links — every destination is real and clickable */}
+        <div className={`mt-5 grid gap-2 ${keUrl ? "grid-cols-3" : "grid-cols-2"}`}>
           <a
             href={srcUrl} target="_blank" rel="noopener noreferrer"
             className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text hover:bg-white/10"
           >
-            View on {deal.source} ↗
+            {deal.source} ↗
           </a>
-          {azUrl ? (
+          <a
+            href={azUrl} target="_blank" rel="noopener noreferrer"
+            className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text hover:bg-white/10"
+          >
+            Amazon ↗
+          </a>
+          {keUrl && (
             <a
-              href={azUrl} target="_blank" rel="noopener noreferrer"
+              href={keUrl} target="_blank" rel="noopener noreferrer"
               className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text hover:bg-white/10"
             >
-              Open on Amazon ↗
+              Keepa ↗
             </a>
-          ) : (
-            <span className="rounded-xl border border-border bg-black/20 py-2.5 text-center text-[12px] text-text-faint">No ASIN yet</span>
           )}
         </div>
 

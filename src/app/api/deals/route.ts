@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { generateDeals } from "@/lib/mockData";
-import { parseQuery, applyQuery } from "@/lib/search";
+import { applyQuery } from "@/lib/search";
+import { parseBrief, aiEnabled } from "@/lib/ai";
 import { KEEPA_LIVE } from "@/lib/keepa";
 
 // GET /api/deals?q=...&seed=...&sites=walmart.com,target.com&ai=1
-// Returns deals from the mock sourcing engine (Keepa-backed once live),
-// restricted to the targeted sites and/or AI web search when provided.
+// AI parses the natural-language brief (with a rule-based fallback); deals come
+// from the mock sourcing engine (Keepa-backed once live).
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q") ?? "";
@@ -18,12 +19,13 @@ export async function GET(req: Request) {
     sites: sites.length ? sites : undefined,
     aiSearch,
   });
-  const parsed = parseQuery(q);
+  const parsed = await parseBrief(q);
   if (q.trim()) deals = applyQuery(deals, parsed);
 
   return NextResponse.json({
     deals,
     parsed,
     dataSource: KEEPA_LIVE ? "keepa-live" : "mock",
+    ai: aiEnabled(),
   });
 }

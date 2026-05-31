@@ -16,6 +16,7 @@ interface ImportResponse {
 const FIELD_LABELS: Record<Field, string> = {
   asin: "ASIN", upc: "UPC / EAN", title: "Title", brand: "Brand",
   category: "Category", cost: "Your cost", sell: "Sell price", bsr: "BSR",
+  url: "Source URL",
 };
 
 // Upload an Excel/CSV, auto-map columns, preview, then push rows into the feed.

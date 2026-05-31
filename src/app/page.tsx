@@ -9,9 +9,13 @@ import { DealDetail } from "@/components/DealDetail";
 import { SourcesPanel } from "@/components/SourcesPanel";
 import { ImportModal } from "@/components/ImportModal";
 import { BrandsPanel } from "@/components/BrandsPanel";
+import { BuyListPanel } from "@/components/BuyListPanel";
+import { Copilot } from "@/components/Copilot";
 import type { TargetSite } from "@/lib/sources";
 import { DEFAULT_SITES, loadSources, saveSources, loadAiSearch, saveAiSearch } from "@/lib/sources";
 import { loadExemptBrands, saveExemptBrands, isExempt } from "@/lib/brands";
+import type { BuyItem } from "@/lib/buylist";
+import { loadBuyList, saveBuyList, addToBuyList } from "@/lib/buylist";
 
 const SUGGESTIONS = [
   "Toys under $20 with 50% ROI",
@@ -45,6 +49,14 @@ export default function Home() {
   const [showBrands, setShowBrands] = useState(false);
   const [groupBy, setGroupBy] = useState<"none" | "source">("none");
 
+  // Buy list, copilot, AI status, and learned Buy/Pass decisions.
+  const [buyList, setBuyList] = useState<BuyItem[]>([]);
+  const [showBuyList, setShowBuyList] = useState(false);
+  const [showCopilot, setShowCopilot] = useState(false);
+  const [aiOn, setAiOn] = useState(false);
+  const [bought, setBought] = useState<string[]>([]);
+  const [passed, setPassed] = useState<string[]>([]);
+
   async function load(q: string, s: number, opts?: { sites?: TargetSite[]; ai?: boolean }) {
     setLoading(true);
     const activeSites = (opts?.sites ?? sites).filter((x) => x.enabled).map((x) => x.domain);
@@ -55,6 +67,7 @@ export default function Home() {
     setDeals(data.deals);
     setUnderstood(data.parsed?.understood ?? []);
     setDataSource(data.dataSource);
+    setAiOn(Boolean(data.ai));
     setLoading(false);
   }
 
@@ -64,15 +77,31 @@ export default function Home() {
     const s = loadSources();
     const ai = loadAiSearch();
     const eb = loadExemptBrands();
+    const bl = loadBuyList();
     const id = setTimeout(() => {
       setSites(s);
       setAiSearch(ai);
       setExemptBrands(eb);
+      setBuyList(bl);
       load("", seed, { sites: s, ai });
     }, 0);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function updateBuyList(next: BuyItem[]) {
+    setBuyList(next);
+    saveBuyList(next);
+  }
+  function handleAddToBuyList(deal: Deal) {
+    updateBuyList(addToBuyList(buyList, deal));
+    setBought((b) => (b.includes(deal.title) ? b : [...b, deal.title]));
+    setSelected(null);
+  }
+  function handlePass(deal: Deal) {
+    setPassed((p) => (p.includes(deal.title) ? p : [...p, deal.title]));
+    setSelected(null);
+  }
 
   function updateBrands(next: string[]) {
     setExemptBrands(next);
@@ -188,6 +217,25 @@ export default function Home() {
               <span className="hidden sm:inline">Import</span>
             </button>
             <button
+              onClick={() => setShowBuyList(true)}
+              className="flex shrink-0 items-center gap-2 rounded-xl border border-border bg-white/5 px-3.5 py-2.5 text-[13px] font-medium text-text transition hover:bg-white/10"
+              title="Your buy list & ROI tracker"
+            >
+              <CartIcon />
+              <span className="hidden sm:inline">Buy List</span>
+              {buyList.length > 0 && (
+                <span className="rounded-md bg-accent/15 px-1.5 text-[11px] font-semibold text-accent">{buyList.length}</span>
+              )}
+            </button>
+            <button
+              onClick={() => setShowCopilot(true)}
+              className="flex shrink-0 items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-[13px] font-medium text-accent transition hover:bg-accent/15"
+              title="Chat with your AI sourcing copilot"
+            >
+              <SparkIcon />
+              <span className="hidden sm:inline">Copilot</span>
+            </button>
+            <button
               onClick={runScan}
               disabled={scanning}
               className="flex shrink-0 items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
@@ -213,7 +261,13 @@ export default function Home() {
                 ? "Demo mode — realistic mock data. Add a Keepa API key to source live deals."
                 : "Live — powered by Keepa (Amazon US)."}
             </div>
-            <span className="hidden text-text-faint sm:block">Marketplace: Amazon US · amazon.com</span>
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-text-faint">
+                <span className={`h-2 w-2 rounded-full ${aiOn ? "bg-accent" : "bg-text-faint"}`} />
+                AI {aiOn ? "on (Claude)" : "fallback"}
+              </span>
+              <span className="hidden text-text-faint sm:block">Amazon US · amazon.com</span>
+            </div>
           </div>
 
           {!query && (
@@ -312,7 +366,28 @@ export default function Home() {
         </div>
       </main>
 
-      {selected && <DealDetail deal={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <DealDetail
+          deal={selected}
+          inBuyList={buyList.some((i) => i.deal.id === selected.id)}
+          onClose={() => setSelected(null)}
+          onAddToBuyList={handleAddToBuyList}
+          onPass={handlePass}
+        />
+      )}
+
+      {showBuyList && (
+        <BuyListPanel items={buyList} onChange={updateBuyList} onClose={() => setShowBuyList(false)} />
+      )}
+
+      {showCopilot && (
+        <Copilot
+          deals={allDeals}
+          decisions={{ bought, passed }}
+          aiOn={aiOn}
+          onClose={() => setShowCopilot(false)}
+        />
+      )}
 
       {showSources && (
         <SourcesPanel
@@ -430,6 +505,23 @@ function TagIcon() {
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0l-7.2-7.2a2 2 0 01-.6-1.4V4a2 2 0 012-2h8a2 2 0 011.4.6l6.4 6.4a2 2 0 010 2.8z" />
       <circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function CartIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
+      <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
+    </svg>
+  );
+}
+
+function SparkIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2l2.4 6.9L21 11l-6.6 2.1L12 20l-2.4-6.9L3 11l6.6-2.1L12 2z" />
     </svg>
   );
 }

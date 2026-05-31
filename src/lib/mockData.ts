@@ -4,6 +4,7 @@
 
 import { calcProfit } from "./profit";
 import { decideVerdict } from "./verdict";
+import { sourceSearchUrl } from "./links";
 import type {
   Deal,
   RiskFlag,
@@ -156,7 +157,7 @@ export function generateDeals(seed = 7, count = 14, targets?: ScanTargets): Deal
       match,
       source: site,
       origin: site === "AI Web Search" ? "web" : "scan",
-      sourceUrl: "#",
+      sourceUrl: sourceSearchUrl(site, prod.title),
       sourcePrice,
       amazonPrice,
       bsr,

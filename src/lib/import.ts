@@ -8,7 +8,7 @@ import type { AsinMatch, Deal, RiskFlag } from "./types";
 
 export type Field =
   | "asin" | "upc" | "title" | "brand" | "category"
-  | "cost" | "sell" | "bsr";
+  | "cost" | "sell" | "bsr" | "url";
 
 // Header synonyms — lowercased, non-alphanumerics stripped before matching.
 const SYNONYMS: Record<Field, string[]> = {
@@ -20,6 +20,7 @@ const SYNONYMS: Record<Field, string[]> = {
   cost: ["cost", "buyprice", "buycost", "sourceprice", "wholesale", "wholesaleprice", "unitcost", "yourcost", "purchaseprice", "supplierprice"],
   sell: ["sell", "sellprice", "saleprice", "amazonprice", "listprice", "price", "buyboxprice", "retail", "retailprice", "currentprice"],
   bsr: ["bsr", "rank", "salesrank", "bestsellersrank", "bestsellerrank"],
+  url: ["url", "link", "sourceurl", "producturl", "productlink", "listingurl", "href", "weblink"],
 };
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -115,6 +116,7 @@ export function rowsToDeals(rows: Record<string, unknown>[], sourceLabel = "Impo
     const brand = String((m.brand && row[m.brand]) ?? title.split(" ")[0] ?? "Item").trim();
     const category = String((m.category && row[m.category]) ?? "Home & Kitchen").trim();
     const bsr = m.bsr ? Math.max(1, Math.round(num(row[m.bsr]))) : 120000;
+    const url = String((m.url && row[m.url]) ?? "").trim();
 
     const { profit, roi, margin, totalFees } = calcProfit({ cost, sellPrice: sell, category });
     const match = buildMatch(asin, upc, title || brand);
@@ -134,7 +136,7 @@ export function rowsToDeals(rows: Record<string, unknown>[], sourceLabel = "Impo
       match,
       source: sourceLabel,
       origin: "import",
-      sourceUrl: "#",
+      sourceUrl: url || "#",
       sourcePrice: cost,
       amazonPrice: sell,
       bsr,

@@ -9,6 +9,7 @@ import { computeSurvival, SURVIVAL_COLOR } from "@/lib/survival";
 import { computeSaturation, SATURATION_COLOR } from "@/lib/saturation";
 import { computeUngating, type Approvals } from "@/lib/ungating";
 import { channelOptions } from "@/lib/channels";
+import type { RetailOffer } from "@/lib/retail";
 import { resolveSourceUrl, amazonUrl } from "@/lib/links";
 import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
 import { Sparkline } from "./Sparkline";
@@ -49,6 +50,10 @@ export function DealDetail({
   const [ai, setAi] = useState<AIVerdict | null>(null);
   const [aiLoading, setAiLoading] = useState(true);
 
+  const [offers, setOffers] = useState<RetailOffer[] | null>(null);
+  const [retailSrc, setRetailSrc] = useState<"live" | "mock" | null>(null);
+  const [offersLoading, setOffersLoading] = useState(true);
+
   useEffect(() => {
     let live = true;
     // Deferred so we don't setState synchronously in the effect body.
@@ -63,6 +68,24 @@ export function DealDetail({
         .then((r) => r.json())
         .then((d) => { if (live && !d.error) setAi(d); })
         .finally(() => { if (live) setAiLoading(false); });
+    }, 0);
+    return () => { live = false; clearTimeout(id); };
+  }, [deal]);
+
+  // Fetch real retailer prices (live SerpApi when configured, else modeled).
+  useEffect(() => {
+    let live = true;
+    const id = setTimeout(() => {
+      setOffersLoading(true);
+      setOffers(null);
+      fetch("/api/retail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: deal.title, brand: deal.brand, asin: deal.match.asin, reference: deal.amazonPrice }),
+      })
+        .then((r) => r.json())
+        .then((d) => { if (live && !d.error) { setOffers(d.offers ?? []); setRetailSrc(d.source); } })
+        .finally(() => { if (live) setOffersLoading(false); });
     }, 0);
     return () => { live = false; clearTimeout(id); };
   }, [deal]);
@@ -211,6 +234,50 @@ export function DealDetail({
             <span>BSR #{compact(deal.bsr)} · {deal.offerCount} offers</span>
           </div>
           <Sparkline data={deal.priceHistory} width={380} height={90} color={deal.imageColor} />
+        </div>
+
+        {/* Source options (real retailer prices) */}
+        <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
+          <div className="mb-2 flex items-center justify-between text-[11px]">
+            <span className="font-semibold uppercase tracking-wide text-text-dim">Source options</span>
+            {retailSrc && (
+              <span className="flex items-center gap-1.5 text-text-faint">
+                <span className={`h-1.5 w-1.5 rounded-full ${retailSrc === "live" ? "bg-accent" : "bg-warn"}`} />
+                {retailSrc === "live" ? "live retailer prices" : "modeled prices"}
+              </span>
+            )}
+          </div>
+          {offersLoading ? (
+            <div className="flex items-center gap-2 py-1 text-[12px] text-text-dim"><Spinner /> Checking retailers…</div>
+          ) : offers && offers.length > 0 ? (
+            <div className="space-y-1">
+              {offers.map((o) => {
+                const op = calcProfit({ cost: o.price, sellPrice: sell, category: deal.category });
+                const active = Math.abs(cost - o.price) < 0.005;
+                return (
+                  <div
+                    key={o.retailer}
+                    onClick={() => setCost(o.price)}
+                    className={`flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${active ? "bg-accent/10 ring-1 ring-accent/40" : "bg-black/20 hover:bg-white/5"}`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span className={active ? "font-semibold text-text" : "text-text-dim"}>{o.retailer}</span>
+                      {o.clearance && <span className="rounded bg-accent/15 px-1 text-[9px] font-medium text-accent">clearance</span>}
+                      {!o.inStock && <span className="rounded bg-danger/15 px-1 text-[9px] font-medium text-[#f88aa1]">out of stock</span>}
+                    </span>
+                    <span className="flex items-center gap-3">
+                      <span className="font-medium text-text">{usd(o.price)}</span>
+                      <span className="w-12 text-right font-mono" style={{ color: op.roi >= 30 ? "#10d98e" : op.roi >= 15 ? "#f5a524" : "#f4476b" }}>{op.roi}%</span>
+                      <a href={o.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-accent">↗</a>
+                    </span>
+                  </div>
+                );
+              })}
+              <p className="pt-1 text-[10px] text-text-faint">Tap a retailer to price the calculator against that source.</p>
+            </div>
+          ) : (
+            <p className="text-[11px] text-text-dim">No retailer matches found — verify the item manually.</p>
+          )}
         </div>
 
         {/* Live profit calculator */}

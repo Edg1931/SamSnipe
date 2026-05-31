@@ -17,6 +17,7 @@
 import { calcProfit } from "./profit";
 import { decideVerdict } from "./verdict";
 import { swatchFor } from "./verdict";
+import { bestMockOffer } from "./retail";
 import type { Deal, PricePoint, RiskFlag } from "./types";
 
 const KEEPA_BASE = "https://api.keepa.com";
@@ -183,7 +184,14 @@ async function findDealAsins(opts: { category?: number; limit: number }): Promis
 function toDeal(p: KeepaProduct, i: number): Deal | null {
   if (!p.currentPrice || p.currentPrice <= 0) return null;
   const amazonPrice = p.currentPrice;
-  const sourcePrice = +(amazonPrice * COST_RATIO).toFixed(2);
+  const brand = p.brand || p.title.split(" ")[0] || "Item";
+
+  // Real(istic) buy-side cost from the retailer feed; flat ratio as a fallback.
+  const offer = bestMockOffer({ title: p.title, brand, asin: p.asin, reference: amazonPrice });
+  const sourcePrice = offer ? offer.price : +(amazonPrice * COST_RATIO).toFixed(2);
+  const source = offer ? offer.retailer : "Keepa deal";
+  const sourceUrl = offer ? offer.url : `https://www.amazon.com/dp/${p.asin}`;
+
   const bsr = p.currentBsr ?? 150000;
   const { profit, roi, margin, totalFees } = calcProfit({
     cost: sourcePrice,
@@ -194,7 +202,6 @@ function toDeal(p: KeepaProduct, i: number): Deal | null {
   const risks: RiskFlag[] = [];
   if (bsr > 250000) risks.push("LOW_SELL_THROUGH");
   const { verdict, reason } = decideVerdict(roi, 100, risks);
-  const brand = p.brand || p.title.split(" ")[0] || "Item";
 
   return {
     id: `keepa_${p.asin}_${i}`,
@@ -208,9 +215,9 @@ function toDeal(p: KeepaProduct, i: number): Deal | null {
       method: ["UPC_EAN"],
       rationale: "Live ASIN from Keepa — authoritative match against the Amazon catalog.",
     },
-    source: "Keepa deal",
+    source,
     origin: "web",
-    sourceUrl: `https://www.amazon.com/dp/${p.asin}`,
+    sourceUrl,
     sourcePrice,
     amazonPrice,
     bsr,

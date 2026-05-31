@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { TargetSite } from "@/lib/sources";
 import { parseSiteInput } from "@/lib/sources";
+import { storeHomeUrl } from "@/lib/links";
 
 // Manage the specific sites the agent searches + the AI web-search toggle.
 export function SourcesPanel({
@@ -83,7 +84,13 @@ export function SourcesPanel({
                 </span>
                 <div>
                   <div className="text-[13px] font-medium text-text">{s.label}</div>
-                  <div className="text-[11px] text-text-faint">{s.domain}{s.custom && " · custom"}</div>
+                  <a
+                    href={storeHomeUrl(s.domain)} target="_blank" rel="noopener noreferrer"
+                    className="text-[11px] text-text-faint hover:text-accent hover:underline"
+                    title={`Open ${s.domain} to verify the store`}
+                  >
+                    {s.domain} ↗{s.custom && <span className="text-text-faint"> · custom</span>}
+                  </a>
                 </div>
               </div>
               <div className="flex items-center gap-2">

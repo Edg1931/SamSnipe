@@ -5,7 +5,10 @@ import type { Deal, Verdict } from "@/lib/types";
 import { usd } from "@/lib/format";
 import { Sidebar } from "@/components/Sidebar";
 import { DealCard } from "@/components/DealCard";
+import { DealTable } from "@/components/DealTable";
 import { DealDetail } from "@/components/DealDetail";
+import { computeSurvival } from "@/lib/survival";
+import { dealScore } from "@/lib/score";
 import { SourcesPanel } from "@/components/SourcesPanel";
 import { ImportModal } from "@/components/ImportModal";
 import { BrandsPanel } from "@/components/BrandsPanel";
@@ -47,6 +50,13 @@ export default function Home() {
   const [filter, setFilter] = useState<Filter>("ALL");
   const [selected, setSelected] = useState<Deal | null>(null);
 
+  // Feed controls: filters, view density, pagination.
+  const PAGE = 24;
+  const [view, setView] = useState<"cards" | "table">("cards");
+  const [showFilters, setShowFilters] = useState(false);
+  const [shown, setShown] = useState(PAGE);
+  const [crit, setCrit] = useState({ minRoi: 0, maxBsr: 0, maxCost: 0, minSurvival: 0, minSold: 0, category: "" });
+
   // Targeted sources + AI web search + spreadsheet imports.
   const [sites, setSites] = useState<TargetSite[]>(DEFAULT_SITES);
   const [aiSearch, setAiSearch] = useState(true);
@@ -70,7 +80,7 @@ export default function Home() {
   // Ungating approvals (#3), taste decisions (#5), optimizer (#9), shelf scan (#10).
   const [approvals, setApprovals] = useState<Approvals>({ brands: [], categories: [] });
   const [decisions, setDecisions] = useState<Decision[]>([]);
-  const [sortMode, setSortMode] = useState<"roi" | "foryou">("roi");
+  const [sortMode, setSortMode] = useState<"score" | "roi" | "foryou">("score");
   const [showApprovals, setShowApprovals] = useState(false);
   const [showOptimizer, setShowOptimizer] = useState(false);
   const [showScan, setShowScan] = useState(false);
@@ -79,6 +89,7 @@ export default function Home() {
 
   async function load(q: string, s: number, opts?: { sites?: TargetSite[]; ai?: boolean }) {
     setLoading(true);
+    setShown(PAGE);
     try {
       const activeSites = (opts?.sites ?? sites).filter((x) => x.enabled).map((x) => x.domain);
       const ai = (opts?.ai ?? aiSearch) ? "1" : "0";
@@ -206,18 +217,37 @@ export default function Home() {
 
   const tasteProfile = useMemo(() => buildProfile(decisions), [decisions]);
 
+  // Apply the filter rail to the brand-cleaned feed.
+  const filteredDeals = useMemo(() => {
+    return allDeals.filter((d) => {
+      if (crit.minRoi && d.roi < crit.minRoi) return false;
+      if (crit.maxBsr && d.bsr > crit.maxBsr) return false;
+      if (crit.maxCost && d.sourcePrice > crit.maxCost) return false;
+      if (crit.minSold && d.monthlySales < crit.minSold) return false;
+      if (crit.category && d.category !== crit.category) return false;
+      if (crit.minSurvival && computeSurvival(d).score < crit.minSurvival) return false;
+      return true;
+    });
+  }, [allDeals, crit]);
+
   const visible = useMemo(() => {
-    let list = filter === "ALL" ? allDeals : allDeals.filter((d) => d.verdict === filter);
-    if (sortMode === "foryou") {
-      list = [...list].sort((a, b) => scoreFit(b, tasteProfile) - scoreFit(a, tasteProfile));
-    }
+    let list = filter === "ALL" ? filteredDeals : filteredDeals.filter((d) => d.verdict === filter);
+    if (sortMode === "foryou") list = [...list].sort((a, b) => scoreFit(b, tasteProfile) - scoreFit(a, tasteProfile));
+    else if (sortMode === "score") list = [...list].sort((a, b) => dealScore(b).score - dealScore(a).score);
+    else list = [...list].sort((a, b) => b.roi - a.roi);
     return list;
-  }, [allDeals, filter, sortMode, tasteProfile]);
+  }, [filteredDeals, filter, sortMode, tasteProfile]);
+
+  const visiblePage = useMemo(() => visible.slice(0, shown), [visible, shown]);
+
+  const activeFilters =
+    (crit.minRoi ? 1 : 0) + (crit.maxBsr ? 1 : 0) + (crit.maxCost ? 1 : 0) +
+    (crit.minSurvival ? 1 : 0) + (crit.minSold ? 1 : 0) + (crit.category ? 1 : 0);
 
   // Group the visible deals by source/website when requested.
   const grouped = useMemo(() => {
     const map = new Map<string, Deal[]>();
-    for (const d of visible) {
+    for (const d of visiblePage) {
       const arr = map.get(d.source) ?? [];
       arr.push(d);
       map.set(d.source, arr);
@@ -231,7 +261,7 @@ export default function Home() {
         avgRoi: items.reduce((a, d) => a + d.roi, 0) / items.length,
       }))
       .sort((a, b) => b.items.length - a.items.length);
-  }, [visible]);
+  }, [visiblePage]);
 
   // Brands present in the feed, used to power quick-add chips in the panel.
   const feedBrands = useMemo(
@@ -341,10 +371,10 @@ export default function Home() {
               </div>
               <div className="flex gap-1 rounded-xl border border-border bg-bg-card/60 p-1">
                 <span className="px-2 py-1.5 text-[11px] text-text-faint">Sort</span>
-                {([["roi", "Top ROI"], ["foryou", "For You"]] as const).map(([m, lbl]) => (
+                {([["score", "Deal Score"], ["roi", "Top ROI"], ["foryou", "For You"]] as const).map(([m, lbl]) => (
                   <button
                     key={m}
-                    onClick={() => setSortMode(m)}
+                    onClick={() => { setSortMode(m); setShown(PAGE); }}
                     className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition ${
                       sortMode === m ? "bg-accent/15 text-accent" : "text-text-dim hover:text-text"
                     }`}
@@ -354,6 +384,28 @@ export default function Home() {
                   </button>
                 ))}
               </div>
+              <div className="flex gap-1 rounded-xl border border-border bg-bg-card/60 p-1">
+                <span className="px-2 py-1.5 text-[11px] text-text-faint">View</span>
+                {(["cards", "table"] as const).map((vw) => (
+                  <button
+                    key={vw}
+                    onClick={() => setView(vw)}
+                    className={`rounded-lg px-3 py-1.5 text-[12px] font-medium capitalize transition ${
+                      view === vw ? "bg-accent/15 text-accent" : "text-text-dim hover:text-text"
+                    }`}
+                  >
+                    {vw}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowFilters((v) => !v)}
+                className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[12px] font-medium transition ${
+                  showFilters || activeFilters ? "border-accent/40 bg-accent/10 text-accent" : "border-border bg-bg-card/60 text-text-dim hover:text-text"
+                }`}
+              >
+                Filters{activeFilters ? ` · ${activeFilters}` : ""}
+              </button>
               <div className="flex gap-1 rounded-xl border border-border bg-bg-card/60 p-1">
                 <span className="px-2 py-1.5 text-[11px] text-text-faint">Group</span>
                 {(["none", "source"] as const).map((g) => (
@@ -370,12 +422,42 @@ export default function Home() {
               </div>
             </div>
             <span className="text-[11px] text-text-faint">
-              {visible.length} deals · sorted by ROI
-              {hiddenByBrand > 0 && (
-                <span className="text-[#f88aa1]"> · {hiddenByBrand} hidden by brand</span>
-              )}
+              {visible.length} deals · {sortMode === "score" ? "by Deal Score" : sortMode === "foryou" ? "for you" : "by ROI"}
+              {hiddenByBrand > 0 && <span className="text-[#f88aa1]"> · {hiddenByBrand} hidden by brand</span>}
             </span>
           </div>
+
+          {/* Filter rail */}
+          {showFilters && (
+            <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl border border-border bg-bg-card/60 p-3 sm:grid-cols-3 lg:grid-cols-6">
+              <FilterNum label="Min ROI %" value={crit.minRoi} onChange={(v) => { setCrit((c) => ({ ...c, minRoi: v })); setShown(PAGE); }} />
+              <FilterNum label="Max BSR" value={crit.maxBsr} onChange={(v) => { setCrit((c) => ({ ...c, maxBsr: v })); setShown(PAGE); }} />
+              <FilterNum label="Max cost $" value={crit.maxCost} onChange={(v) => { setCrit((c) => ({ ...c, maxCost: v })); setShown(PAGE); }} />
+              <FilterNum label="Min safety" value={crit.minSurvival} onChange={(v) => { setCrit((c) => ({ ...c, minSurvival: v })); setShown(PAGE); }} />
+              <FilterNum label="Min sold/mo" value={crit.minSold} onChange={(v) => { setCrit((c) => ({ ...c, minSold: v })); setShown(PAGE); }} />
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-wide text-text-faint">Category</span>
+                <select
+                  value={crit.category}
+                  onChange={(e) => { setCrit((c) => ({ ...c, category: e.target.value })); setShown(PAGE); }}
+                  className="mt-1 w-full rounded-lg border border-border bg-black/30 px-2 py-1.5 text-[12px] text-text outline-none focus:border-accent/50"
+                >
+                  <option value="">All</option>
+                  {["Toys", "Electronics", "Home & Kitchen", "Sports & Outdoors", "Beauty", "Health & Household", "Tools & Home Improvement"].map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </label>
+              {activeFilters > 0 && (
+                <button
+                  onClick={() => { setCrit({ minRoi: 0, maxBsr: 0, maxCost: 0, minSurvival: 0, minSold: 0, category: "" }); setShown(PAGE); }}
+                  className="col-span-2 self-end rounded-lg border border-border bg-white/5 py-1.5 text-[12px] text-text-dim hover:text-text sm:col-span-1"
+                >
+                  Reset filters
+                </button>
+              )}
+            </div>
+          )}
 
           {loading ? (
             <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -383,6 +465,8 @@ export default function Home() {
             </div>
           ) : visible.length === 0 ? (
             <Empty />
+          ) : view === "table" ? (
+            <DealTable deals={visiblePage} onOpen={setSelected} />
           ) : groupBy === "source" ? (
             <div className="mt-4 space-y-6">
               {grouped.map((g) => (
@@ -412,9 +496,21 @@ export default function Home() {
             </div>
           ) : (
             <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {visible.map((d) => (
+              {visiblePage.map((d) => (
                 <DealCard key={d.id} deal={d} onClick={() => setSelected(d)} />
               ))}
+            </div>
+          )}
+
+          {/* Load more */}
+          {!loading && visiblePage.length < visible.length && (
+            <div className="mt-5 text-center">
+              <button
+                onClick={() => setShown((n) => n + PAGE)}
+                className="rounded-xl border border-border bg-white/5 px-5 py-2.5 text-[13px] font-medium text-text hover:bg-white/10"
+              >
+                Load more · {visible.length - visiblePage.length} remaining
+              </button>
             </div>
           )}
         </div>
@@ -559,6 +655,21 @@ function StatCard({ label, value, sub, tone, icon }: { label: string; value: str
       <div className="mt-1.5 text-2xl font-bold" style={{ color: tone }}>{value}</div>
       <div className="text-[11px] text-text-dim">{sub}</div>
     </div>
+  );
+}
+
+function FilterNum({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <label className="block">
+      <span className="text-[10px] uppercase tracking-wide text-text-faint">{label}</span>
+      <input
+        type="number"
+        value={value || ""}
+        placeholder="any"
+        onChange={(e) => onChange(Math.max(0, +e.target.value || 0))}
+        className="mt-1 w-full rounded-lg border border-border bg-black/30 px-2 py-1.5 text-[12px] text-text placeholder:text-text-faint outline-none focus:border-accent/50"
+      />
+    </label>
   );
 }
 

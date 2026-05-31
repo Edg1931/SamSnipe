@@ -1,10 +1,14 @@
 import type { Deal } from "@/lib/types";
 import { usd, timeAgo, compact } from "@/lib/format";
-import { ConfidenceRing, VerdictBadge, RiskChip } from "./Badges";
+import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
 import { Sparkline } from "./Sparkline";
+import { computeSurvival } from "@/lib/survival";
+import { estimateVelocity } from "@/lib/velocity";
 
 export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void }) {
   const roiColor = deal.roi >= 40 ? "#10d98e" : deal.roi >= 25 ? "#84cc16" : deal.roi >= 15 ? "#f5a524" : "#f4476b";
+  const survival = computeSurvival(deal);
+  const v = estimateVelocity(deal);
   return (
     <button
       onClick={onClick}
@@ -20,12 +24,20 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-[13px] font-semibold text-text">{deal.title}</span>
-            <VerdictBadge verdict={deal.verdict} />
+            <div className="flex shrink-0 items-center gap-1.5">
+              <SurvivalShield score={survival.score} band={survival.band} />
+              <VerdictBadge verdict={deal.verdict} />
+            </div>
           </div>
           <div className="mt-1 flex items-center gap-2 text-[11px] text-text-dim">
             <span className="font-mono text-accent">{deal.match.asin}</span>
             <span className="text-text-faint">·</span>
             <span>{deal.category}</span>
+            {deal.origin !== "scan" && (
+              <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-text-faint">
+                {deal.origin === "import" ? "Imported" : "Web"}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -53,7 +65,10 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
       <div className="mt-3 flex items-end justify-between">
         <div className="space-y-1 text-[11px] text-text-dim">
           <div>BSR <span className="font-medium text-text">#{compact(deal.bsr)}</span> in {deal.bsrCategory}</div>
-          <div>~{compact(deal.monthlySales)}/mo · {deal.offerCount} offers</div>
+          <div>
+            <span className="font-medium text-text">~{compact(v.unitsLow)}–{compact(v.unitsHigh)}/mo</span>
+            {" · "}{deal.offerCount} offers · {v.decay} decay
+          </div>
         </div>
         <Sparkline data={deal.priceHistory} color={deal.imageColor} />
       </div>

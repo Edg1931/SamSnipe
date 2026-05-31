@@ -1,17 +1,97 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Deal } from "@/lib/types";
 import { usd, compact, RISK_LABELS } from "@/lib/format";
 import { calcProfit } from "@/lib/profit";
-import { ConfidenceRing, VerdictBadge, RiskChip } from "./Badges";
+import { estimateVelocity } from "@/lib/velocity";
+import { computeSurvival, SURVIVAL_COLOR } from "@/lib/survival";
+import { computeSaturation, SATURATION_COLOR } from "@/lib/saturation";
+import { computeUngating, type Approvals } from "@/lib/ungating";
+import { channelOptions } from "@/lib/channels";
+import type { RetailOffer } from "@/lib/retail";
+import { resolveSourceUrl, amazonUrl } from "@/lib/links";
+import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
 import { Sparkline } from "./Sparkline";
 
-// Slide-over with the full deal breakdown + a live what-if profit calculator.
-export function DealDetail({ deal, onClose }: { deal: Deal; onClose: () => void }) {
+interface AIVerdict {
+  verdict: "BUY" | "WATCH" | "PASS";
+  confidence: number;
+  reason: string;
+  risks: string[];
+  keyFactors: string[];
+  source: "ai" | "rules";
+}
+
+// Slide-over: full deal breakdown, live AI analysis, sell-through model,
+// what-if profit calculator, real outbound links, and buy-list actions.
+export function DealDetail({
+  deal, inBuyList, exempted, approvals, onClose, onAddToBuyList, onPass, onExemptBrand,
+}: {
+  deal: Deal;
+  inBuyList: boolean;
+  exempted: boolean;
+  approvals: Approvals;
+  onClose: () => void;
+  onAddToBuyList: (deal: Deal) => void;
+  onPass: (deal: Deal) => void;
+  onExemptBrand: (brand: string) => void;
+}) {
   const [cost, setCost] = useState(deal.sourcePrice);
   const [sell, setSell] = useState(deal.amazonPrice);
   const p = calcProfit({ cost, sellPrice: sell, category: deal.category });
+  const v = estimateVelocity(deal);
+  const survival = computeSurvival(deal);
+  const saturation = computeSaturation(deal);
+  const ungating = computeUngating(deal, approvals);
+  const channels = channelOptions(deal);
+  const best = channels[0];
+
+  const [ai, setAi] = useState<AIVerdict | null>(null);
+  const [aiLoading, setAiLoading] = useState(true);
+
+  const [offers, setOffers] = useState<RetailOffer[] | null>(null);
+  const [retailSrc, setRetailSrc] = useState<"live" | "mock" | null>(null);
+  const [offersLoading, setOffersLoading] = useState(true);
+
+  useEffect(() => {
+    let live = true;
+    // Deferred so we don't setState synchronously in the effect body.
+    const id = setTimeout(() => {
+      setAiLoading(true);
+      setAi(null);
+      fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deal }),
+      })
+        .then((r) => r.json())
+        .then((d) => { if (live && !d.error) setAi(d); })
+        .finally(() => { if (live) setAiLoading(false); });
+    }, 0);
+    return () => { live = false; clearTimeout(id); };
+  }, [deal]);
+
+  // Fetch real retailer prices (live SerpApi when configured, else modeled).
+  useEffect(() => {
+    let live = true;
+    const id = setTimeout(() => {
+      setOffersLoading(true);
+      setOffers(null);
+      fetch("/api/retail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: deal.title, brand: deal.brand, asin: deal.match.asin, reference: deal.amazonPrice }),
+      })
+        .then((r) => r.json())
+        .then((d) => { if (live && !d.error) { setOffers(d.offers ?? []); setRetailSrc(d.source); } })
+        .finally(() => { if (live) setOffersLoading(false); });
+    }, 0);
+    return () => { live = false; clearTimeout(id); };
+  }, [deal]);
+
+  const azUrl = amazonUrl(deal.match.asin);
+  const srcUrl = resolveSourceUrl({ source: deal.source, title: deal.title, sourceUrl: deal.sourceUrl });
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -45,21 +125,159 @@ export function DealDetail({ deal, onClose }: { deal: Deal; onClose: () => void 
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-text-dim">{deal.match.rationale}</p>
 
-        {/* AI verdict */}
-        <div className="mt-4 rounded-xl border border-accent/20 bg-accent/5 p-3">
-          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent">
-            <Spark /> AI verdict
+        {/* Account-survival score */}
+        <div
+          className="mt-4 rounded-xl border p-3"
+          style={{ borderColor: `${SURVIVAL_COLOR[survival.band]}40`, background: `${SURVIVAL_COLOR[survival.band]}0d` }}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: SURVIVAL_COLOR[survival.band] }}>
+              <ShieldIcon /> Account-survival score
+            </div>
+            <SurvivalShield score={survival.score} band={survival.band} size="lg" showLabel />
           </div>
-          <p className="text-[12px] leading-relaxed text-text">{deal.verdictReason}</p>
+          <p className="mt-1.5 text-[12px] text-text">{survival.headline}</p>
+          <ul className="mt-2 space-y-1">
+            {survival.factors.filter((f) => f.impact < 0).map((f, i) => (
+              <li key={i} className="flex items-start justify-between gap-2 text-[11px]">
+                <span className="text-text-dim">• {f.detail}</span>
+                <span className="shrink-0 font-mono text-[#f88aa1]">{f.impact}</span>
+              </li>
+            ))}
+            {survival.factors.every((f) => f.impact >= 0) && (
+              <li className="text-[11px] text-text-dim">• No account-safety red flags detected.</li>
+            )}
+          </ul>
+          {survival.suggestExemptBrand && (
+            <button
+              onClick={() => onExemptBrand(survival.suggestExemptBrand!)}
+              disabled={exempted}
+              className="mt-2.5 w-full rounded-lg border border-danger/30 bg-danger/10 py-2 text-[12px] font-medium text-[#f88aa1] transition hover:bg-danger/15 disabled:opacity-50"
+            >
+              {exempted ? `✓ ${survival.suggestExemptBrand} exempted` : `Exempt ${survival.suggestExemptBrand} from future scans`}
+            </button>
+          )}
+        </div>
+
+        {/* Ungating status */}
+        <div className="mt-3 flex items-start gap-2 rounded-xl border border-border bg-black/20 p-2.5">
+          <span
+            className="mt-0.5 h-2 w-2 shrink-0 rounded-full"
+            style={{ background: ungating.status === "open" ? "#10d98e" : ungating.status === "approved" ? "#10d98e" : ungating.canUngate ? "#f5a524" : "#f4476b" }}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-[12px] font-medium text-text">{ungating.label}</div>
+            <p className="text-[11px] leading-snug text-text-dim">{ungating.note}</p>
+          </div>
+        </div>
+
+        {/* AI analysis */}
+        <div className="mt-4 rounded-xl border border-accent/20 bg-accent/5 p-3">
+          <div className="mb-1 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent">
+              <Spark /> AI analysis
+            </div>
+            {ai && (
+              <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-text-faint">
+                {ai.source === "ai" ? "Claude" : "rules engine"}
+              </span>
+            )}
+          </div>
+          {aiLoading ? (
+            <div className="flex items-center gap-2 py-1 text-[12px] text-text-dim"><Spinner /> Analyzing deal…</div>
+          ) : ai ? (
+            <>
+              <div className="flex items-center gap-2">
+                <VerdictBadge verdict={ai.verdict} />
+                <span className="text-[11px] text-text-dim">{ai.confidence}% confidence</span>
+              </div>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-text">{ai.reason}</p>
+              {ai.keyFactors?.length > 0 && (
+                <ul className="mt-1.5 space-y-0.5">
+                  {ai.keyFactors.map((f, i) => (
+                    <li key={i} className="text-[11px] text-text-dim">• {f}</li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : (
+            <p className="text-[12px] text-text-dim">{deal.verdictReason}</p>
+          )}
+        </div>
+
+        {/* Sell-through model */}
+        <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
+          <div className="mb-2 flex items-center justify-between text-[11px] text-text-dim">
+            <span className="font-semibold uppercase tracking-wide">Sell-through forecast</span>
+            <span>{v.confidence}% confidence</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <Mini label="Est. sales" value={`${compact(v.unitsLow)}–${compact(v.unitsHigh)}`} sub="units/mo" />
+            <Mini label="Your pace" value={`${v.monthsToSellThrough}`} sub="mo to clear" />
+            <Mini label="Competition" value={v.decay} sub="decay" />
+          </div>
+          <p className="mt-2 text-[11px] leading-snug text-text-dim">
+            {v.note} Price trend: <span className="text-text">{v.trend}</span>.
+          </p>
+          <div className="mt-2 flex items-start gap-1.5 border-t border-border-soft pt-2">
+            <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full" style={{ background: SATURATION_COLOR[saturation.level] }} />
+            <p className="text-[11px] leading-snug text-text-dim">
+              <span className="font-medium capitalize" style={{ color: SATURATION_COLOR[saturation.level] }}>{saturation.level}</span> · {saturation.note}
+            </p>
+          </div>
         </div>
 
         {/* Price history */}
         <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
           <div className="mb-2 flex items-center justify-between text-[11px] text-text-dim">
             <span>90-day Amazon price</span>
-            <span>BSR #{compact(deal.bsr)} · ~{compact(deal.monthlySales)}/mo</span>
+            <span>BSR #{compact(deal.bsr)} · {deal.offerCount} offers</span>
           </div>
           <Sparkline data={deal.priceHistory} width={380} height={90} color={deal.imageColor} />
+        </div>
+
+        {/* Source options (real retailer prices) */}
+        <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
+          <div className="mb-2 flex items-center justify-between text-[11px]">
+            <span className="font-semibold uppercase tracking-wide text-text-dim">Source options</span>
+            {retailSrc && (
+              <span className="flex items-center gap-1.5 text-text-faint">
+                <span className={`h-1.5 w-1.5 rounded-full ${retailSrc === "live" ? "bg-accent" : "bg-warn"}`} />
+                {retailSrc === "live" ? "live retailer prices" : "modeled prices"}
+              </span>
+            )}
+          </div>
+          {offersLoading ? (
+            <div className="flex items-center gap-2 py-1 text-[12px] text-text-dim"><Spinner /> Checking retailers…</div>
+          ) : offers && offers.length > 0 ? (
+            <div className="space-y-1">
+              {offers.map((o) => {
+                const op = calcProfit({ cost: o.price, sellPrice: sell, category: deal.category });
+                const active = Math.abs(cost - o.price) < 0.005;
+                return (
+                  <div
+                    key={o.retailer}
+                    onClick={() => setCost(o.price)}
+                    className={`flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${active ? "bg-accent/10 ring-1 ring-accent/40" : "bg-black/20 hover:bg-white/5"}`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span className={active ? "font-semibold text-text" : "text-text-dim"}>{o.retailer}</span>
+                      {o.clearance && <span className="rounded bg-accent/15 px-1 text-[9px] font-medium text-accent">clearance</span>}
+                      {!o.inStock && <span className="rounded bg-danger/15 px-1 text-[9px] font-medium text-[#f88aa1]">out of stock</span>}
+                    </span>
+                    <span className="flex items-center gap-3">
+                      <span className="font-medium text-text">{usd(o.price)}</span>
+                      <span className="w-12 text-right font-mono" style={{ color: op.roi >= 30 ? "#10d98e" : op.roi >= 15 ? "#f5a524" : "#f4476b" }}>{op.roi}%</span>
+                      <a href={o.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-accent">↗</a>
+                    </span>
+                  </div>
+                );
+              })}
+              <p className="pt-1 text-[10px] text-text-faint">Tap a retailer to price the calculator against that source.</p>
+            </div>
+          ) : (
+            <p className="text-[11px] text-text-dim">No retailer matches found — verify the item manually.</p>
+          )}
         </div>
 
         {/* Live profit calculator */}
@@ -80,6 +298,30 @@ export function DealDetail({ deal, onClose }: { deal: Deal; onClose: () => void 
           </div>
         </div>
 
+        {/* Multi-channel exits */}
+        <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
+          <div className="mb-2 flex items-center justify-between text-[11px]">
+            <span className="font-semibold uppercase tracking-wide text-text-dim">Best exit channel</span>
+            <span className="text-text-dim">winner: <span className="font-semibold text-accent">{best.channel}</span></span>
+          </div>
+          <div className="space-y-1">
+            {channels.map((ch, i) => (
+              <div
+                key={ch.channel}
+                className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${i === 0 ? "bg-accent/10" : "bg-black/20"}`}
+              >
+                <span className={i === 0 ? "font-semibold text-text" : "text-text-dim"}>{ch.channel}</span>
+                <span className="flex items-center gap-3">
+                  <span className="text-text-dim">{usd(ch.estPrice)}</span>
+                  <span className="font-mono" style={{ color: ch.netProfit > 0 ? "#10d98e" : "#f4476b" }}>{usd(ch.netProfit)}</span>
+                  <span className="w-12 text-right font-mono text-text-dim">{ch.roi}%</span>
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-snug text-text-dim">{best.note}</p>
+        </div>
+
         {/* Risks */}
         {deal.risks.length > 0 && (
           <div className="mt-4">
@@ -88,24 +330,59 @@ export function DealDetail({ deal, onClose }: { deal: Deal; onClose: () => void 
               {deal.risks.map((r) => <RiskChip key={r} risk={r} />)}
             </div>
             <ul className="mt-2 space-y-1 text-[11px] text-text-dim">
-              {deal.risks.map((r) => <li key={r}>• {RISK_LABELS[r]} — flagged by SamSnipe before purchase.</li>)}
+              {deal.risks.map((r) => <li key={r}>• {RISK_LABELS[r]} — flagged before purchase.</li>)}
             </ul>
           </div>
         )}
 
+        {/* Links */}
         <div className="mt-5 grid grid-cols-2 gap-2">
           <a
-            href={deal.sourceUrl}
+            href={srcUrl} target="_blank" rel="noopener noreferrer"
             className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text hover:bg-white/10"
           >
-            View on {deal.source}
+            View on {deal.source} ↗
           </a>
-          <button className="rounded-xl bg-accent py-2.5 text-center text-[12px] font-semibold text-black hover:opacity-90">
-            Add to buy list
+          {azUrl ? (
+            <a
+              href={azUrl} target="_blank" rel="noopener noreferrer"
+              className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text hover:bg-white/10"
+            >
+              Open on Amazon ↗
+            </a>
+          ) : (
+            <span className="rounded-xl border border-border bg-black/20 py-2.5 text-center text-[12px] text-text-faint">No ASIN yet</span>
+          )}
+        </div>
+
+        {/* Buy-list actions */}
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            onClick={() => onPass(deal)}
+            className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text-dim hover:bg-white/10"
+          >
+            Pass
+          </button>
+          <button
+            onClick={() => onAddToBuyList(deal)}
+            disabled={inBuyList}
+            className="rounded-xl bg-accent py-2.5 text-center text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-50"
+          >
+            {inBuyList ? "✓ In buy list" : "Add to buy list"}
           </button>
         </div>
         <div className="h-4" />
       </aside>
+    </div>
+  );
+}
+
+function Mini({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="rounded-lg bg-black/30 p-2">
+      <div className="text-[9px] uppercase tracking-wide text-text-faint">{label}</div>
+      <div className="text-sm font-bold capitalize text-text">{value}</div>
+      <div className="text-[9px] text-text-faint">{sub}</div>
     </div>
   );
 }
@@ -117,8 +394,7 @@ function Field({ label, value, onChange }: { label: string; value: number; onCha
       <div className="mt-1 flex items-center rounded-lg border border-border bg-black/30 px-2">
         <span className="text-text-faint">$</span>
         <input
-          type="number"
-          value={value}
+          type="number" value={value}
           onChange={(e) => onChange(+e.target.value)}
           className="w-full bg-transparent py-1.5 pl-1 text-sm text-text outline-none"
         />
@@ -140,6 +416,23 @@ function Spark() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
       <path d="M12 2l2.4 6.9L21 11l-6.6 2.1L12 20l-2.4-6.9L3 11l6.6-2.1L12 2z" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2l8 3v6c0 5-3.4 9.3-8 11-4.6-1.7-8-6-8-11V5l8-3z" />
+    </svg>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+      <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }

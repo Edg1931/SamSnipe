@@ -1,11 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Deal, Verdict } from "@/lib/types";
 import { usd } from "@/lib/format";
 import { Sidebar } from "@/components/Sidebar";
 import { DealCard } from "@/components/DealCard";
 import { DealDetail } from "@/components/DealDetail";
+import { SourcesPanel } from "@/components/SourcesPanel";
+import { ImportModal } from "@/components/ImportModal";
+import { BrandsPanel } from "@/components/BrandsPanel";
+import { BuyListPanel } from "@/components/BuyListPanel";
+import { Copilot } from "@/components/Copilot";
+import { ApprovalsPanel } from "@/components/ApprovalsPanel";
+import { OptimizerModal } from "@/components/OptimizerModal";
+import { ScanModal } from "@/components/ScanModal";
+import type { TargetSite } from "@/lib/sources";
+import { DEFAULT_SITES, loadSources, saveSources, loadAiSearch, saveAiSearch } from "@/lib/sources";
+import { loadExemptBrands, saveExemptBrands, isExempt } from "@/lib/brands";
+import type { BuyItem } from "@/lib/buylist";
+import { loadBuyList, saveBuyList, addToBuyList } from "@/lib/buylist";
+import type { Approvals } from "@/lib/ungating";
+import { loadApprovals, saveApprovals } from "@/lib/ungating";
+import type { Decision } from "@/lib/taste";
+import { loadDecisions, saveDecisions, recordDecision, buildProfile, scoreFit } from "@/lib/taste";
 
 const SUGGESTIONS = [
   "Toys under $20 with 50% ROI",
@@ -27,22 +44,120 @@ export default function Home() {
   const [filter, setFilter] = useState<Filter>("ALL");
   const [selected, setSelected] = useState<Deal | null>(null);
 
-  async function load(q: string, s: number) {
+  // Targeted sources + AI web search + spreadsheet imports.
+  const [sites, setSites] = useState<TargetSite[]>(DEFAULT_SITES);
+  const [aiSearch, setAiSearch] = useState(true);
+  const [showSources, setShowSources] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [imported, setImported] = useState<Deal[]>([]);
+
+  // Brand exemptions + feed organization.
+  const [exemptBrands, setExemptBrands] = useState<string[]>([]);
+  const [showBrands, setShowBrands] = useState(false);
+  const [groupBy, setGroupBy] = useState<"none" | "source">("none");
+
+  // Buy list, copilot, AI status, and learned Buy/Pass decisions.
+  const [buyList, setBuyList] = useState<BuyItem[]>([]);
+  const [showBuyList, setShowBuyList] = useState(false);
+  const [showCopilot, setShowCopilot] = useState(false);
+  const [aiOn, setAiOn] = useState(false);
+  const [bought, setBought] = useState<string[]>([]);
+  const [passed, setPassed] = useState<string[]>([]);
+
+  // Ungating approvals (#3), taste decisions (#5), optimizer (#9), shelf scan (#10).
+  const [approvals, setApprovals] = useState<Approvals>({ brands: [], categories: [] });
+  const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [sortMode, setSortMode] = useState<"roi" | "foryou">("roi");
+  const [showApprovals, setShowApprovals] = useState(false);
+  const [showOptimizer, setShowOptimizer] = useState(false);
+  const [showScan, setShowScan] = useState(false);
+
+  async function load(q: string, s: number, opts?: { sites?: TargetSite[]; ai?: boolean }) {
     setLoading(true);
-    const res = await fetch(`/api/deals?q=${encodeURIComponent(q)}&seed=${s}`);
+    const activeSites = (opts?.sites ?? sites).filter((x) => x.enabled).map((x) => x.domain);
+    const ai = (opts?.ai ?? aiSearch) ? "1" : "0";
+    const params = new URLSearchParams({ q, seed: String(s), sites: activeSites.join(","), ai });
+    const res = await fetch(`/api/deals?${params.toString()}`);
     const data = await res.json();
     setDeals(data.deals);
     setUnderstood(data.parsed?.understood ?? []);
     setDataSource(data.dataSource);
+    setAiOn(Boolean(data.ai));
     setLoading(false);
   }
 
   useEffect(() => {
-    // Initial fetch on mount; defer so we don't setState synchronously in the effect body.
-    const id = setTimeout(() => load("", seed), 0);
+    // Hydrate saved sources/AI preference, then do the initial fetch. Deferred
+    // so we don't setState synchronously in the effect body.
+    const s = loadSources();
+    const ai = loadAiSearch();
+    const eb = loadExemptBrands();
+    const bl = loadBuyList();
+    const ap = loadApprovals();
+    const dec = loadDecisions();
+    const id = setTimeout(() => {
+      setSites(s);
+      setAiSearch(ai);
+      setExemptBrands(eb);
+      setBuyList(bl);
+      setApprovals(ap);
+      setDecisions(dec);
+      load("", seed, { sites: s, ai });
+    }, 0);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function updateApprovals(a: Approvals) {
+    setApprovals(a);
+    saveApprovals(a);
+  }
+  function record(deal: Deal, action: "buy" | "pass") {
+    const next = recordDecision(decisions, deal, action);
+    setDecisions(next);
+    saveDecisions(next);
+  }
+
+  function updateBuyList(next: BuyItem[]) {
+    setBuyList(next);
+    saveBuyList(next);
+  }
+  function handleAddToBuyList(deal: Deal) {
+    updateBuyList(addToBuyList(buyList, deal));
+    setBought((b) => (b.includes(deal.title) ? b : [...b, deal.title]));
+    record(deal, "buy");
+    setSelected(null);
+  }
+  function handlePass(deal: Deal) {
+    setPassed((p) => (p.includes(deal.title) ? p : [...p, deal.title]));
+    record(deal, "pass");
+    setSelected(null);
+  }
+  function handleAddBasket(picks: { deal: Deal; qty: number }[]) {
+    let next = buyList;
+    for (const { deal, qty } of picks) next = addToBuyList(next, deal, qty);
+    updateBuyList(next);
+    picks.forEach(({ deal }) => record(deal, "buy"));
+  }
+
+  function updateBrands(next: string[]) {
+    setExemptBrands(next);
+    saveExemptBrands(next);
+  }
+  function handleExemptBrand(brand: string) {
+    if (!exemptBrands.some((b) => b.toLowerCase() === brand.toLowerCase())) {
+      updateBrands([...exemptBrands, brand].sort((a, b) => a.localeCompare(b)));
+    }
+  }
+
+  function updateSites(next: TargetSite[]) {
+    setSites(next);
+    saveSources(next);
+  }
+  function updateAi(on: boolean) {
+    setAiSearch(on);
+    saveAiSearch(on);
+  }
 
   function runScan() {
     setScanning(true);
@@ -53,17 +168,60 @@ export default function Home() {
     }, 1400);
   }
 
-  const visible = useMemo(
-    () => (filter === "ALL" ? deals : deals.filter((d) => d.verdict === filter)),
-    [deals, filter]
+  // Imported rows live alongside scanned deals; combined feed is ROI-ranked.
+  const combined = useMemo(
+    () => [...imported, ...deals].sort((a, b) => b.roi - a.roi),
+    [imported, deals]
+  );
+
+  // Drop any deal whose brand is on the exemption blocklist.
+  const allDeals = useMemo(
+    () => combined.filter((d) => !isExempt(d.brand, exemptBrands)),
+    [combined, exemptBrands]
+  );
+  const hiddenByBrand = combined.length - allDeals.length;
+
+  const tasteProfile = useMemo(() => buildProfile(decisions), [decisions]);
+
+  const visible = useMemo(() => {
+    let list = filter === "ALL" ? allDeals : allDeals.filter((d) => d.verdict === filter);
+    if (sortMode === "foryou") {
+      list = [...list].sort((a, b) => scoreFit(b, tasteProfile) - scoreFit(a, tasteProfile));
+    }
+    return list;
+  }, [allDeals, filter, sortMode, tasteProfile]);
+
+  // Group the visible deals by source/website when requested.
+  const grouped = useMemo(() => {
+    const map = new Map<string, Deal[]>();
+    for (const d of visible) {
+      const arr = map.get(d.source) ?? [];
+      arr.push(d);
+      map.set(d.source, arr);
+    }
+    // Sections ordered by deal count, then best ROI within each.
+    return [...map.entries()]
+      .map(([source, items]) => ({
+        source,
+        origin: items[0].origin,
+        items: items.sort((a, b) => b.roi - a.roi),
+        avgRoi: items.reduce((a, d) => a + d.roi, 0) / items.length,
+      }))
+      .sort((a, b) => b.items.length - a.items.length);
+  }, [visible]);
+
+  // Brands present in the feed, used to power quick-add chips in the panel.
+  const feedBrands = useMemo(
+    () => [...new Set(combined.map((d) => d.brand))].sort((a, b) => a.localeCompare(b)),
+    [combined]
   );
 
   const stats = useMemo(() => {
-    const buys = deals.filter((d) => d.verdict === "BUY");
-    const avgRoi = deals.length ? deals.reduce((a, d) => a + d.roi, 0) / deals.length : 0;
+    const buys = allDeals.filter((d) => d.verdict === "BUY");
+    const avgRoi = allDeals.length ? allDeals.reduce((a, d) => a + d.roi, 0) / allDeals.length : 0;
     const profit = buys.reduce((a, d) => a + d.profit * Math.min(d.monthlySales, 30), 0);
-    return { found: deals.length, buys: buys.length, avgRoi, profit };
-  }, [deals]);
+    return { found: allDeals.length, buys: buys.length, avgRoi, profit };
+  }, [allDeals]);
 
   return (
     <div className="flex min-h-screen">
@@ -71,8 +229,16 @@ export default function Home() {
 
       <main className="min-w-0 flex-1">
         <header className="glass sticky top-0 z-30 border-b border-border px-5 py-3.5">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <SearchBar value={query} onChange={setQuery} onSubmit={() => load(query, seed)} understood={understood} />
+            <button
+              onClick={() => setShowCopilot(true)}
+              className="flex shrink-0 items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-[13px] font-medium text-accent transition hover:bg-accent/15"
+              title="Chat with your AI sourcing copilot"
+            >
+              <SparkIcon />
+              <span className="hidden sm:inline">Copilot</span>
+            </button>
             <button
               onClick={runScan}
               disabled={scanning}
@@ -81,6 +247,17 @@ export default function Home() {
               {scanning ? <Spinner /> : <Radar />}
               {scanning ? "Scanning…" : "Run Scan"}
             </button>
+          </div>
+
+          {/* Tool toolbar */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <Tool onClick={() => setShowSources(true)} icon={<GlobeIcon />} label="Sources" badge={String(sites.filter((s) => s.enabled).length + (aiSearch ? 1 : 0))} />
+            <Tool onClick={() => setShowApprovals(true)} icon={<KeyIcon />} label="Approvals" badge={approvals.brands.length + approvals.categories.length || undefined} />
+            <Tool onClick={() => setShowBrands(true)} icon={<TagIcon />} label="Exempt" badge={exemptBrands.length || undefined} danger />
+            <Tool onClick={() => setShowImport(true)} icon={<UploadIcon />} label="Import / Manifest" />
+            <Tool onClick={() => setShowScan(true)} icon={<CameraIcon />} label="Shelf Scan" />
+            <Tool onClick={() => setShowOptimizer(true)} icon={<ChartIcon />} label="Optimizer" />
+            <Tool onClick={() => setShowBuyList(true)} icon={<CartIcon />} label="Buy List" badge={buyList.length || undefined} />
           </div>
         </header>
 
@@ -99,7 +276,13 @@ export default function Home() {
                 ? "Demo mode — realistic mock data. Add a Keepa API key to source live deals."
                 : "Live — powered by Keepa (Amazon US)."}
             </div>
-            <span className="hidden text-text-faint sm:block">Marketplace: Amazon US · amazon.com</span>
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-text-faint">
+                <span className={`h-2 w-2 rounded-full ${aiOn ? "bg-accent" : "bg-text-faint"}`} />
+                AI {aiOn ? "on (Claude)" : "fallback"}
+              </span>
+              <span className="hidden text-text-faint sm:block">Amazon US · amazon.com</span>
+            </div>
           </div>
 
           {!query && (
@@ -117,21 +300,57 @@ export default function Home() {
             </div>
           )}
 
-          <div className="mt-5 flex items-center justify-between">
-            <div className="flex gap-1 rounded-xl border border-border bg-bg-card/60 p-1">
-              {(["ALL", "BUY", "WATCH", "PASS"] as Filter[]).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition ${
-                    filter === f ? "bg-accent/15 text-accent" : "text-text-dim hover:text-text"
-                  }`}
-                >
-                  {f === "ALL" ? "All" : f.charAt(0) + f.slice(1).toLowerCase()}
-                </button>
-              ))}
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex gap-1 rounded-xl border border-border bg-bg-card/60 p-1">
+                {(["ALL", "BUY", "WATCH", "PASS"] as Filter[]).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition ${
+                      filter === f ? "bg-accent/15 text-accent" : "text-text-dim hover:text-text"
+                    }`}
+                  >
+                    {f === "ALL" ? "All" : f.charAt(0) + f.slice(1).toLowerCase()}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1 rounded-xl border border-border bg-bg-card/60 p-1">
+                <span className="px-2 py-1.5 text-[11px] text-text-faint">Sort</span>
+                {([["roi", "Top ROI"], ["foryou", "For You"]] as const).map(([m, lbl]) => (
+                  <button
+                    key={m}
+                    onClick={() => setSortMode(m)}
+                    className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition ${
+                      sortMode === m ? "bg-accent/15 text-accent" : "text-text-dim hover:text-text"
+                    }`}
+                    title={m === "foryou" ? (tasteProfile.hasData ? `Learned from ${tasteProfile.buys} buys / ${tasteProfile.passes} passes` : "Buy or pass a few deals to train this") : undefined}
+                  >
+                    {lbl}{m === "foryou" && tasteProfile.hasData ? " ✨" : ""}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1 rounded-xl border border-border bg-bg-card/60 p-1">
+                <span className="px-2 py-1.5 text-[11px] text-text-faint">Group</span>
+                {(["none", "source"] as const).map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => setGroupBy(g)}
+                    className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition ${
+                      groupBy === g ? "bg-accent/15 text-accent" : "text-text-dim hover:text-text"
+                    }`}
+                  >
+                    {g === "none" ? "Flat" : "By source"}
+                  </button>
+                ))}
+              </div>
             </div>
-            <span className="text-[11px] text-text-faint">{visible.length} deals · sorted by ROI</span>
+            <span className="text-[11px] text-text-faint">
+              {visible.length} deals · sorted by ROI
+              {hiddenByBrand > 0 && (
+                <span className="text-[#f88aa1]"> · {hiddenByBrand} hidden by brand</span>
+              )}
+            </span>
           </div>
 
           {loading ? (
@@ -140,6 +359,33 @@ export default function Home() {
             </div>
           ) : visible.length === 0 ? (
             <Empty />
+          ) : groupBy === "source" ? (
+            <div className="mt-4 space-y-6">
+              {grouped.map((g) => (
+                <section key={g.source}>
+                  <div className="mb-3 flex items-center gap-2.5">
+                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-white/5 text-[11px] font-bold text-text-dim">
+                      {g.source.replace(/^www\./, "").slice(0, 2).toUpperCase()}
+                    </span>
+                    <h3 className="text-[13px] font-semibold text-text">{g.source}</h3>
+                    {g.origin !== "scan" && (
+                      <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-text-faint">
+                        {g.origin === "import" ? "Imported" : "Web"}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-text-faint">
+                      {g.items.length} deal{g.items.length === 1 ? "" : "s"} · {g.avgRoi.toFixed(0)}% avg ROI
+                    </span>
+                    <div className="ml-1 h-px flex-1 bg-border" />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {g.items.map((d) => (
+                      <DealCard key={d.id} deal={d} onClick={() => setSelected(d)} />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
           ) : (
             <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {visible.map((d) => (
@@ -150,8 +396,92 @@ export default function Home() {
         </div>
       </main>
 
-      {selected && <DealDetail deal={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <DealDetail
+          deal={selected}
+          inBuyList={buyList.some((i) => i.deal.id === selected.id)}
+          exempted={isExempt(selected.brand, exemptBrands)}
+          approvals={approvals}
+          onClose={() => setSelected(null)}
+          onAddToBuyList={handleAddToBuyList}
+          onPass={handlePass}
+          onExemptBrand={handleExemptBrand}
+        />
+      )}
+
+      {showBuyList && (
+        <BuyListPanel items={buyList} onChange={updateBuyList} onClose={() => setShowBuyList(false)} />
+      )}
+
+      {showCopilot && (
+        <Copilot
+          deals={allDeals}
+          decisions={{ bought, passed }}
+          aiOn={aiOn}
+          onClose={() => setShowCopilot(false)}
+        />
+      )}
+
+      {showSources && (
+        <SourcesPanel
+          sites={sites}
+          aiSearch={aiSearch}
+          onChange={updateSites}
+          onAiChange={updateAi}
+          onClose={() => setShowSources(false)}
+        />
+      )}
+
+      {showImport && (
+        <ImportModal
+          onClose={() => setShowImport(false)}
+          onImport={(d) => setImported((prev) => [...d, ...prev])}
+        />
+      )}
+
+      {showBrands && (
+        <BrandsPanel
+          brands={exemptBrands}
+          suggestions={feedBrands}
+          onChange={updateBrands}
+          onClose={() => setShowBrands(false)}
+        />
+      )}
+
+      {showApprovals && (
+        <ApprovalsPanel approvals={approvals} onChange={updateApprovals} onClose={() => setShowApprovals(false)} />
+      )}
+
+      {showOptimizer && (
+        <OptimizerModal deals={allDeals} onAddBasket={handleAddBasket} onClose={() => setShowOptimizer(false)} />
+      )}
+
+      {showScan && <ScanModal aiOn={aiOn} onClose={() => setShowScan(false)} />}
     </div>
+  );
+}
+
+function Tool({
+  onClick, icon, label, badge, danger,
+}: {
+  onClick: () => void;
+  icon: ReactNode;
+  label: string;
+  badge?: string | number;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-white/5 px-2.5 py-1.5 text-[12px] font-medium text-text-dim transition hover:bg-white/10 hover:text-text"
+      title={label}
+    >
+      {icon}
+      <span>{label}</span>
+      {badge != null && (
+        <span className={`rounded-md px-1.5 text-[10px] font-semibold ${danger ? "bg-danger/15 text-[#f88aa1]" : "bg-accent/15 text-accent"}`}>{badge}</span>
+      )}
+    </button>
   );
 }
 
@@ -216,6 +546,73 @@ function Radar() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
       <path d="M19.07 4.93A10 10 0 1112 2v10l6 4" />
+    </svg>
+  );
+}
+
+function GlobeIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18" />
+    </svg>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
+    </svg>
+  );
+}
+
+function TagIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0l-7.2-7.2a2 2 0 01-.6-1.4V4a2 2 0 012-2h8a2 2 0 011.4.6l6.4 6.4a2 2 0 010 2.8z" />
+      <circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function CartIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
+      <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
+    </svg>
+  );
+}
+
+function SparkIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2l2.4 6.9L21 11l-6.6 2.1L12 20l-2.4-6.9L3 11l6.6-2.1L12 2z" />
+    </svg>
+  );
+}
+
+function KeyIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7.5" cy="15.5" r="4.5" /><path d="M10.7 12.3L19 4m-3 0h3v3" />
+    </svg>
+  );
+}
+
+function CameraIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7h3l2-2h8l2 2h3v12H3z" /><circle cx="12" cy="13" r="3.5" />
+    </svg>
+  );
+}
+
+function ChartIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18M7 14l3-4 3 3 4-6" />
     </svg>
   );
 }

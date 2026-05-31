@@ -1,5 +1,38 @@
 import type { AsinMatch, RiskFlag, Verdict } from "@/lib/types";
 import { confColor, RISK_LABELS, VERDICT_META } from "@/lib/format";
+import type { SurvivalBand } from "@/lib/survival";
+import { SURVIVAL_COLOR } from "@/lib/survival";
+
+// Account-survival shield: 0–100, colored by band. The trust-and-safety signal.
+export function SurvivalShield({
+  score, band, size = "sm", showLabel = false,
+}: {
+  score: number;
+  band: SurvivalBand;
+  size?: "sm" | "lg";
+  showLabel?: boolean;
+}) {
+  const c = SURVIVAL_COLOR[band];
+  const big = size === "lg";
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full font-semibold"
+      style={{
+        color: c,
+        background: `${c}1f`,
+        padding: big ? "4px 10px" : "2px 7px",
+        fontSize: big ? 13 : 11,
+      }}
+      title={`Account-survival score: ${score}/100 (${band})`}
+    >
+      <svg width={big ? 14 : 11} height={big ? 14 : 11} viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2l8 3v6c0 5-3.4 9.3-8 11-4.6-1.7-8-6-8-11V5l8-3z" />
+      </svg>
+      {score}
+      {showLabel && <span className="font-medium capitalize opacity-80">· {band}</span>}
+    </span>
+  );
+}
 
 export function VerdictBadge({ verdict }: { verdict: Verdict }) {
   const m = VERDICT_META[verdict];

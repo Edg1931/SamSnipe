@@ -10,7 +10,7 @@
 import { calcProfit } from "./profit";
 import { decideVerdict, swatchFor } from "./verdict";
 import { bestMockOffer } from "./retail";
-import type { Deal, PricePoint, RiskFlag } from "./types";
+import type { Deal, PricePoint, RiskFlag, DiscoveredDeal } from "./types";
 
 const KEEPA_BASE = "https://api.keepa.com";
 const KEY = process.env.KEEPA_API_KEY;
@@ -190,6 +190,95 @@ export async function findByCode(code: string): Promise<string[]> {
   return (data?.products ?? []).map((p) => p.asin);
 }
 
+/** Keepa product search — resolve a title/brand string to candidate ASINs. */
+export async function searchProducts(term: string): Promise<string[]> {
+  if (!KEEPA_LIVE || !term.trim()) return [];
+  const data = (await keepaFetch(`/search?key=${KEY}&domain=1&type=product&term=${encodeURIComponent(term)}`)) as
+    | { asinList?: string[]; products?: { asin: string }[] }
+    | null;
+  if (data?.asinList?.length) return data.asinList;
+  return (data?.products ?? []).map((p) => p.asin);
+}
+
+// Turn AI-web-discovered candidates into analyzed Deals: keep the real retail
+// buy price/URL, and verify the ASIN + pull the Amazon sell-side from Keepa.
+export async function resolveCandidates(cands: DiscoveredDeal[]): Promise<Deal[]> {
+  const out: Deal[] = [];
+  for (let i = 0; i < cands.length; i++) {
+    const c = cands[i];
+    let asin: string | undefined;
+    if (KEEPA_LIVE) {
+      if (c.upc) asin = (await findByCode(c.upc))[0];
+      if (!asin) asin = (await searchProducts(`${c.brand ?? ""} ${c.title}`.trim()))[0];
+    }
+    const kp = asin ? await getProduct(asin) : null;
+    out.push(buildFromCandidate(c, kp, i));
+  }
+  return out;
+}
+
+function buildFromCandidate(c: DiscoveredDeal, kp: KeepaProduct | null, i: number): Deal {
+  const sourcePrice = +c.sourcePrice.toFixed(2);
+  const amazonPrice = kp?.currentPrice ?? +(sourcePrice / COST_RATIO).toFixed(2);
+  const category = kp?.category ?? c.category ?? "Home & Kitchen";
+  const weightLb = kp?.weightLb ?? 1;
+  const bsr = kp?.currentBsr ?? 150000;
+
+  const est = calcProfit({ cost: sourcePrice, sellPrice: amazonPrice, category, weightLb });
+  let totalFees = est.totalFees;
+  if (kp?.referralPct != null && kp?.fbaFee != null) totalFees = +(amazonPrice * (kp.referralPct / 100) + kp.fbaFee).toFixed(2);
+  const profit = +(amazonPrice - sourcePrice - totalFees).toFixed(2);
+  const roi = sourcePrice > 0 ? +((profit / sourcePrice) * 100).toFixed(1) : 0;
+  const margin = amazonPrice > 0 ? +((profit / amazonPrice) * 100).toFixed(1) : 0;
+
+  const verified = Boolean(kp);
+  const confidence = verified ? 100 : 60;
+  const risks: RiskFlag[] = [];
+  if (!verified) risks.push("VARIATION_MISMATCH");
+  if (bsr > 250000) risks.push("LOW_SELL_THROUGH");
+  const { verdict, reason } = decideVerdict(roi, confidence, risks);
+  const brand = c.brand || kp?.brand || c.title.split(" ")[0] || "Item";
+
+  return {
+    id: `web_${i}_${(kp?.asin ?? c.title).slice(0, 12)}`,
+    title: kp?.title ?? c.title,
+    brand,
+    category,
+    imageColor: swatchFor(brand),
+    imageUrl: kp?.imageUrl,
+    rating: kp?.rating ?? undefined,
+    reviewCount: kp?.reviewCount ?? undefined,
+    avg90: kp?.avg90 ?? undefined,
+    match: {
+      asin: kp?.asin ?? "—",
+      confidence,
+      method: verified ? ["UPC_EAN", "IMAGE_AI"] : ["TITLE_AI"],
+      rationale: verified
+        ? `Found on ${c.retailer} by AI web search; ASIN verified against Keepa.`
+        : `AI-discovered lead from ${c.retailer}. Connect/repair Keepa to verify the ASIN & Amazon price.`,
+      packSizeWarning: !verified,
+    },
+    source: c.retailer,
+    origin: "web",
+    sourceUrl: c.sourceUrl,
+    sourcePrice,
+    amazonPrice,
+    bsr,
+    bsrCategory: category,
+    monthlySales: kp?.monthlySold ?? Math.max(1, Math.floor(40000 / Math.sqrt(bsr + 50))),
+    offerCount: kp?.offerCount ?? 0,
+    profit,
+    roi,
+    margin,
+    fbaFees: totalFees,
+    verdict,
+    verdictReason: reason,
+    risks,
+    priceHistory: kp?.priceHistory?.length ? kp.priceHistory : [{ t: new Date().toISOString().slice(0, 10), price: amazonPrice }],
+    foundAt: new Date().toISOString(),
+  };
+}
+
 // Keepa Deal endpoint — current Amazon US price-drop deals. Paginated so we can
 // surface as many candidates as the deal limit asks for.
 async function findDealAsins(limit: number): Promise<string[]> {
@@ -295,37 +384,74 @@ function toDeal(p: KeepaProduct, i: number): Deal | null {
   };
 }
 
+// Raw, transparent probe — captures the exact HTTP status + Keepa body so we
+// can tell invalid-key from out-of-tokens from no-subscription.
+async function rawProbe(): Promise<Record<string, unknown>> {
+  const url = `${KEEPA_BASE}/product?key=${KEY}&domain=1&asin=B07RP6F4N8&stats=1`;
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    const text = await res.text();
+    let body: Record<string, unknown> | null = null;
+    try { body = JSON.parse(text); } catch { /* non-JSON error page */ }
+    return {
+      httpStatus: res.status,
+      httpOk: res.ok,
+      tokensLeft: body?.tokensLeft,
+      tokensConsumed: body?.tokensConsumed,
+      refillIn: body?.refillIn,
+      keepaError: body?.error ?? null,
+      productCount: Array.isArray(body?.products) ? (body!.products as unknown[]).length : 0,
+      bodySnippet: text.slice(0, 240),
+    };
+  } catch (e) {
+    return { httpStatus: 0, httpOk: false, fetchError: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 // Diagnostic: tells you exactly why live data is or isn't flowing.
 export async function keepaStatus(): Promise<Record<string, unknown>> {
   const keyPresent = KEEPA_KEY_PRESENT;
+  const liveDisabled = keyPresent && process.env.KEEPA_LIVE === "0";
   if (!keyPresent) {
     return { keyPresent: false, live: false, ok: false,
-      reason: "KEEPA_API_KEY is not set in this environment. Add it in Vercel → Settings → Environment Variables (Production), then redeploy." };
+      reason: "KEEPA_API_KEY is not set. Add it in Vercel → Settings → Environment Variables (Production), then redeploy." };
   }
-  // Validate the key + check token balance with one cheap product call.
-  const prod = (await keepaFetch(`/product?key=${KEY}&domain=1&asin=B07RP6F4N8&stats=1`)) as
-    | { tokensLeft?: number; error?: { message?: string }; products?: { title?: string }[] }
-    | null;
-  if (!prod) {
-    return { keyPresent: true, live: KEEPA_LIVE, ok: false,
-      reason: "Keepa request failed — the key may be invalid, out of tokens, or blocked. Check your key at keepa.com/#!api." };
+
+  const probe = await rawProbe();
+  const ok = Boolean(probe.httpOk) && Number(probe.productCount) > 0;
+
+  let reason = "Live data is flowing.";
+  if (!ok) {
+    if (probe.httpStatus === 401 || probe.httpStatus === 403) {
+      reason = "Keepa rejected the key (401/403). Double-check KEEPA_API_KEY — copy it exactly from keepa.com/#!api (no quotes/spaces). Note: the Keepa API requires an active paid API subscription, separate from the browser extension.";
+    } else if (probe.httpStatus === 429) {
+      reason = "Keepa rate-limited (429) — too many requests or no tokens available right now. Wait for token refill or raise your plan.";
+    } else if (Number(probe.tokensLeft) <= 0) {
+      reason = "Out of Keepa tokens (tokensLeft ≤ 0). Your plan's token bucket is empty — wait for refill or upgrade.";
+    } else if (probe.keepaError) {
+      reason = `Keepa returned an error: ${JSON.stringify(probe.keepaError)}`;
+    } else if (probe.fetchError) {
+      reason = `Could not reach Keepa: ${probe.fetchError}`;
+    } else {
+      reason = "Keepa request did not return a product — check the key and plan at keepa.com/#!api.";
+    }
+  } else if (liveDisabled) {
+    reason = "Key works, but KEEPA_LIVE=0 is set in your environment — remove it (or set it to 1) and redeploy to serve live data.";
   }
-  if (prod.error) {
-    return { keyPresent: true, live: KEEPA_LIVE, ok: false, reason: `Keepa error: ${prod.error.message}` };
-  }
-  // How many ASINs each sourcing path yields.
-  const dealAsins = await findDealAsins(10);
-  const bestAsins = dealAsins.length ? [] : await findBestSellerAsins(10);
+
+  const dealAsins = ok ? await findDealAsins(10) : [];
+  const bestAsins = ok && dealAsins.length === 0 ? await findBestSellerAsins(10) : [];
+
   return {
     keyPresent: true,
     live: KEEPA_LIVE,
-    ok: true,
-    tokensLeft: prod.tokensLeft,
-    sampleProduct: prod.products?.[0]?.title ?? null,
+    liveDisabledByEnv: liveDisabled,
+    ok,
+    reason,
+    probe,
     dealEndpointAsins: dealAsins.length,
     bestSellerAsins: bestAsins.length,
-    willServeLive: KEEPA_LIVE && (dealAsins.length > 0 || bestAsins.length > 0),
-    note: dealAsins.length === 0 ? "Deal endpoint returned 0 — using Best Sellers fallback." : "Deal endpoint working.",
+    willServeLive: KEEPA_LIVE && ok && (dealAsins.length > 0 || bestAsins.length > 0),
   };
 }
 

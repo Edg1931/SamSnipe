@@ -46,6 +46,7 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
   const [seed, setSeed] = useState(7);
   const [filter, setFilter] = useState<Filter>("ALL");
   const [selected, setSelected] = useState<Deal | null>(null);
@@ -143,6 +144,20 @@ export default function Home() {
     setSearches(s);
     saveSearches(s);
   }
+  // Single entry point for the sidebar nav — close everything, then open one.
+  function navigate(key: string) {
+    setShowSources(false); setShowBrands(false); setShowImport(false);
+    setShowBuyList(false); setShowCopilot(false); setShowApprovals(false);
+    setShowOptimizer(false); setShowScan(false); setShowAutoPilot(false);
+    setSelected(null);
+    if (key === "autopilot") setShowAutoPilot(true);
+    else if (key === "optimizer") setShowOptimizer(true);
+    else if (key === "buylist") setShowBuyList(true);
+    else if (key === "scan") setShowScan(true);
+    else if (key === "sources") setShowSources(true);
+    else if (key === "approvals") setShowApprovals(true);
+    // "deals" simply closes panels and returns to the feed.
+  }
   function runWatch(q: string) {
     setQuery(q);
     setShowAutoPilot(false);
@@ -193,6 +208,28 @@ export default function Home() {
   function updateAi(on: boolean) {
     setAiSearch(on);
     saveAiSearch(on);
+  }
+
+  // AI searches the open web for deals, resolves them to ASINs via Keepa, and
+  // blends the results into the feed.
+  async function discover() {
+    setDiscovering(true);
+    try {
+      const res = await fetch("/api/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brief: query }),
+      });
+      const data = await res.json();
+      if (Array.isArray(data.deals) && data.deals.length > 0) {
+        setImported((prev) => [...data.deals, ...prev]);
+        setShown(PAGE);
+      }
+    } catch {
+      /* discovery is additive — failures just yield no new deals */
+    } finally {
+      setDiscovering(false);
+    }
   }
 
   function runScan() {
@@ -280,12 +317,21 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar active="deals" />
+      <Sidebar active="deals" onNavigate={navigate} />
 
       <main className="min-w-0 flex-1">
         <header className="glass sticky top-0 z-30 border-b border-border px-5 py-3.5">
           <div className="flex items-center gap-2.5">
             <SearchBar value={query} onChange={setQuery} onSubmit={() => load(query, seed)} understood={understood} />
+            <button
+              onClick={discover}
+              disabled={discovering}
+              className="flex shrink-0 items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-[13px] font-medium text-accent transition hover:bg-accent/15 disabled:opacity-60"
+              title="Have AI search the open web for fresh deals"
+            >
+              {discovering ? <Spinner /> : <GlobeIcon />}
+              <span className="hidden sm:inline">{discovering ? "Searching web…" : "AI Discover"}</span>
+            </button>
             <button
               onClick={() => setShowCopilot(true)}
               className="flex shrink-0 items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-[13px] font-medium text-accent transition hover:bg-accent/15"

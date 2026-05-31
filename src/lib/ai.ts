@@ -253,6 +253,53 @@ export async function scanShelf(
   }
 }
 
+// --- AI web-search deal discovery ---
+// Uses Claude's server-side web_search tool to hunt the open internet for real,
+// currently-available discounted/clearance products with Amazon resale upside.
+import type { DiscoveredDeal } from "./types";
+
+const DISCOVER_SYSTEM = `You are a relentless online-arbitrage deal hunter for Amazon US resellers.
+Use web search aggressively across many US retailers (Walmart, Target, Home Depot, Best Buy, Kohl's,
+Macy's, Lowe's, Costco, Sam's Club, Big Lots, Ollie's, and brand outlet stores) to find REAL,
+currently in-stock, discounted or clearance products that could resell for a profit on Amazon.
+Only include products you actually found with a real source URL and a real current price.
+Favor items likely to have a strong Amazon Best Sellers Rank.`;
+
+export async function discoverDeals(brief?: string): Promise<{ candidates: DiscoveredDeal[]; source: "ai" | "offline" }> {
+  if (!aiEnabled()) return { candidates: [], source: "offline" };
+  try {
+    const res = await client().messages.create({
+      model: MODEL,
+      max_tokens: 4000,
+      // Server-side web search runs automatically.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tools: [{ type: "web_search_20260209", name: "web_search" }] as any,
+      system: [{ type: "text", text: DISCOVER_SYSTEM, cache_control: { type: "ephemeral" } }],
+      messages: [{
+        role: "user",
+        content:
+          `${brief ? `Focus on: ${brief}. ` : ""}Search the web right now and find 10-12 real discounted/clearance products at US retailers with Amazon resale potential. ` +
+          `Return ONLY a JSON array (no prose, no markdown fences): ` +
+          `[{"title": string, "brand": string, "retailer": string, "sourcePrice": number, "sourceUrl": string, "category": string, "upc": string optional}]`,
+      }],
+    });
+    const text = res.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { text: string }).text)
+      .join("\n");
+    const m = text.match(/\[[\s\S]*\]/);
+    if (!m) return { candidates: [], source: "ai" };
+    const arr = JSON.parse(m[0]) as DiscoveredDeal[];
+    const candidates = arr
+      .filter((c) => c?.title && c?.sourceUrl && Number(c.sourcePrice) > 0)
+      .slice(0, 12)
+      .map((c) => ({ ...c, sourcePrice: Number(c.sourcePrice) }));
+    return { candidates, source: "ai" };
+  } catch {
+    return { candidates: [], source: "ai" };
+  }
+}
+
 export interface CopilotTurn {
   role: "user" | "assistant";
   content: string;

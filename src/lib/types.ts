@@ -82,6 +82,17 @@ export interface Deal {
   foundAt: string; // ISO timestamp the agent surfaced it
 }
 
+// A raw product candidate the AI found on the open web (before ASIN resolution).
+export interface DiscoveredDeal {
+  title: string;
+  brand?: string;
+  retailer: string;
+  sourcePrice: number;
+  sourceUrl: string;
+  category?: string;
+  upc?: string;
+}
+
 export interface ScanStatus {
   running: boolean;
   sitesScanned: number;

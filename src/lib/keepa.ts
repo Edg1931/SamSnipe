@@ -231,7 +231,11 @@ function buildFromCandidate(c: DiscoveredDeal, kp: KeepaProduct | null, i: numbe
 
   const est = calcProfit({ cost: sourcePrice, sellPrice: amazonPrice, category, weightLb });
   let totalFees = est.totalFees;
-  if (kp?.referralPct != null && kp?.fbaFee != null) totalFees = +(amazonPrice * (kp.referralPct / 100) + kp.fbaFee).toFixed(2);
+  let feesSource: "keepa" | "estimated" = "estimated";
+  if (kp?.referralPct != null && kp?.fbaFee != null) {
+    totalFees = +(amazonPrice * (kp.referralPct / 100) + kp.fbaFee).toFixed(2);
+    feesSource = "keepa";
+  }
   const profit = +(amazonPrice - sourcePrice - totalFees).toFixed(2);
   const roi = sourcePrice > 0 ? +((profit / sourcePrice) * 100).toFixed(1) : 0;
   const margin = amazonPrice > 0 ? +((profit / amazonPrice) * 100).toFixed(1) : 0;
@@ -276,6 +280,7 @@ function buildFromCandidate(c: DiscoveredDeal, kp: KeepaProduct | null, i: numbe
     roi,
     margin,
     fbaFees: totalFees,
+    feesSource,
     verdict,
     verdictReason: reason,
     risks,
@@ -340,8 +345,10 @@ function toDeal(p: KeepaProduct, i: number): Deal | null {
   // Prefer Keepa's real fees for accuracy; fall back to our estimate.
   const est = calcProfit({ cost: sourcePrice, sellPrice: amazonPrice, category: p.category, weightLb: p.weightLb });
   let totalFees = est.totalFees;
+  let feesSource: "keepa" | "estimated" = "estimated";
   if (p.referralPct != null && p.fbaFee != null) {
     totalFees = +(amazonPrice * (p.referralPct / 100) + p.fbaFee).toFixed(2);
+    feesSource = "keepa";
   }
   const profit = +(amazonPrice - sourcePrice - totalFees).toFixed(2);
   const roi = sourcePrice > 0 ? +((profit / sourcePrice) * 100).toFixed(1) : 0;
@@ -381,6 +388,7 @@ function toDeal(p: KeepaProduct, i: number): Deal | null {
     roi,
     margin,
     fbaFees: totalFees,
+    feesSource,
     verdict,
     verdictReason: reason,
     risks,

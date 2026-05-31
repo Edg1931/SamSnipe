@@ -4,6 +4,7 @@ import type { Deal } from "@/lib/types";
 import { usd, compact } from "@/lib/format";
 import { dealScore, SCORE_COLOR } from "@/lib/score";
 import { computeSurvival, SURVIVAL_COLOR } from "@/lib/survival";
+import { assessTrust } from "@/lib/trust";
 import { VERDICT_META } from "@/lib/format";
 
 // Dense, scannable table for triaging a big feed fast.
@@ -23,6 +24,7 @@ export function DealTable({ deals, onOpen }: { deals: Deal[]; onOpen: (d: Deal) 
         {deals.map((d) => {
           const sc = dealScore(d);
           const sv = computeSurvival(d);
+          const tr = assessTrust(d);
           const vm = VERDICT_META[d.verdict];
           const roiColor = d.roi >= 40 ? "#10d98e" : d.roi >= 25 ? "#84cc16" : d.roi >= 15 ? "#f5a524" : "#f4476b";
           return (
@@ -41,7 +43,11 @@ export function DealTable({ deals, onOpen }: { deals: Deal[]; onOpen: (d: Deal) 
                   </span>
                 )}
                 <span className="min-w-0">
-                  <span className="block truncate font-medium text-text">{d.title}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: tr.color }} title={tr.label} />
+                    <span className="truncate font-medium text-text">{d.title}</span>
+                    {tr.stale && <span className="shrink-0 text-[9px] text-warn" title="Price may be stale">⏱</span>}
+                  </span>
                   <span className="block truncate text-[10px] text-text-faint">{d.brand} · {d.category}</span>
                 </span>
               </span>

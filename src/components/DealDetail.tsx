@@ -11,6 +11,7 @@ import { computeUngating, type Approvals } from "@/lib/ungating";
 import { channelOptions } from "@/lib/channels";
 import type { RetailOffer } from "@/lib/retail";
 import { resolveSourceUrl, amazonUrl, keepaUrl, amazonSearch } from "@/lib/links";
+import { assessTrust } from "@/lib/trust";
 import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
 import { Sparkline } from "./Sparkline";
 
@@ -93,7 +94,7 @@ export function DealDetail({
   const azUrl = amazonUrl(deal.match.asin) ?? amazonSearch(`${deal.brand} ${deal.title}`);
   const keUrl = keepaUrl(deal.match.asin);
   const srcUrl = resolveSourceUrl({ source: deal.source, title: deal.title, sourceUrl: deal.sourceUrl });
-  const isLive = deal.origin === "web" && deal.match.confidence === 100;
+  const trust = assessTrust(deal);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -138,12 +139,36 @@ export function DealDetail({
           <VerdictBadge verdict={deal.verdict} />
         </div>
 
-        {/* Data source / accuracy */}
-        <div className="mt-2 flex items-center gap-1.5 text-[11px]">
-          <span className={`h-1.5 w-1.5 rounded-full ${isLive ? "bg-accent" : "bg-warn"}`} />
-          <span className="text-text-dim">
-            {isLive ? "Live Keepa data — real ASIN, price & history." : "Demo data — illustrative numbers; connect Keepa for real ASINs & links."}
-          </span>
+        {/* Data & trust */}
+        <div className="mt-3 rounded-xl border p-3" style={{ borderColor: `${trust.color}40`, background: `${trust.color}0d` }}>
+          <div className="flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: trust.color }}>
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: trust.color }} />
+              {trust.label}
+            </span>
+            <span className="text-[10px] text-text-faint">fetched {trust.fetchedAgoMin < 1 ? "just now" : `${trust.fetchedAgoMin}m ago`}</span>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+            <div className="rounded-lg bg-black/20 px-2.5 py-1.5">
+              <div className="text-text-faint">Price as of</div>
+              <div className={trust.stale ? "font-medium text-warn" : "font-medium text-text"}>
+                {trust.pricedAt ?? "—"}{trust.priceAgeDays != null ? ` · ${trust.priceAgeDays}d old` : ""}{trust.stale ? " ⏱" : ""}
+              </div>
+            </div>
+            <div className="rounded-lg bg-black/20 px-2.5 py-1.5">
+              <div className="text-text-faint">Fees</div>
+              <div className="font-medium" style={{ color: trust.feesSource === "keepa" ? "#10d98e" : "#f5a524" }}>
+                {trust.feesSource === "keepa" ? "Amazon-actual (Keepa)" : "Estimated"}
+              </div>
+            </div>
+          </div>
+          <ul className="mt-2 space-y-0.5">
+            {trust.notes.map((n, i) => <li key={i} className="text-[11px] leading-snug text-text-dim">• {n}</li>)}
+          </ul>
+          <div className="mt-2 flex gap-2 text-[11px]">
+            <a href={azUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Verify on Amazon ↗</a>
+            {keUrl && <a href={keUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Verify on Keepa ↗</a>}
+          </div>
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-text-dim">{deal.match.rationale}</p>
 
@@ -308,7 +333,12 @@ export function DealDetail({
 
         {/* Live profit calculator */}
         <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
-          <div className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-text-dim">Profit calculator</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-text-dim">Profit calculator</div>
+          <p className="mb-3 mt-0.5 text-[10px] text-text-faint">
+            {trust.feesSource === "keepa"
+              ? "This deal's fees are Amazon-actual (Keepa). What-if recalcs below use category-rate estimates."
+              : "Fees estimated from category rates — connect Keepa for Amazon-actual fees."}
+          </p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Your cost" value={cost} onChange={setCost} />
             <Field label="Sell price" value={sell} onChange={setSell} />

@@ -72,6 +72,8 @@ export interface Deal {
   roi: number; // % (computed)
   margin: number; // % (computed)
   fbaFees: number;
+  /** Whether the fee figures are Amazon-accurate (Keepa) or our estimate. */
+  feesSource?: "keepa" | "estimated";
 
   verdict: Verdict;
   /** AI-written one-liner explaining the verdict. */

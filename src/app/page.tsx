@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import type { Deal, Verdict } from "@/lib/types";
 import { usd } from "@/lib/format";
 import { Sidebar } from "@/components/Sidebar";
@@ -54,6 +55,7 @@ export default function Home() {
   const [filter, setFilter] = useState<Filter>("ALL");
   const [selected, setSelected] = useState<Deal | null>(null);
 
+  const router = useRouter();
   // Home vs feed, feed controls: filters, view density, pagination.
   const PAGE = 24;
   const [mode, setMode] = useState<"home" | "feed">("home");
@@ -161,6 +163,7 @@ export default function Home() {
     setShowBuyList(false); setShowCopilot(false); setShowApprovals(false);
     setShowOptimizer(false); setShowScan(false); setShowAutoPilot(false);
     setSelected(null);
+    if (key === "setup") { router.push("/setup"); return; }
     if (key === "home") setMode("home");
     else if (key === "deals" || key === "feed") setMode("feed");
     else if (key === "autopilot") setShowAutoPilot(true);

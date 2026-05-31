@@ -8,7 +8,7 @@ import { timeAgo } from "@/lib/format";
 
 interface Findings {
   ranAt: string; totalNew: number; poolSize: number;
-  store: "kv" | "memory"; keepaLive: boolean; aiWeb: boolean;
+  store: "kv" | "memory"; keepaLive: boolean; aiWeb: boolean; demo?: boolean;
   byWatch: { name: string; count: number }[];
 }
 
@@ -110,6 +110,7 @@ export function AutoPilotPanel({
             <p className="mt-2 text-[11px] text-text-dim">
               Last run {timeAgo(findings.ranAt)} · scanned {findings.poolSize} · <span className="font-semibold text-accent">{findings.totalNew} new</span>
               {" · "}Keepa {findings.keepaLive ? "live" : "off"} · web {findings.aiWeb ? "on" : "off"}
+              {findings.demo ? " · demo data" : ""}
             </p>
           ) : (
             <p className="mt-2 text-[11px] text-text-faint">No run yet — hit “Run now” to hunt your watches.</p>

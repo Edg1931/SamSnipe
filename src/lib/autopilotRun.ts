@@ -7,6 +7,7 @@ import type { Deal } from "./types";
 import type { SavedSearch } from "./autopilot";
 import { liveDeals, resolveCandidates, KEEPA_LIVE } from "./keepa";
 import { discoverDeals, aiEnabled } from "./ai";
+import { generateDeals } from "./mockData";
 import { parseQuery, applyQuery } from "./search";
 import { computeSurvival } from "./survival";
 import { getJSON, setJSON, storeConfigured, K } from "./store";
@@ -19,6 +20,7 @@ export interface Findings {
   store: "kv" | "memory";
   keepaLive: boolean;
   aiWeb: boolean;
+  demo: boolean;
 }
 
 const MIN_SAFETY = Number(process.env.AUTOPILOT_MIN_SAFETY || "60");
@@ -35,6 +37,13 @@ export async function runAutopilot(opts?: { web?: boolean }): Promise<{ findings
       const { candidates } = await discoverDeals();
       if (candidates.length) pool = [...pool, ...(await resolveCandidates(candidates))];
     } catch { /* additive */ }
+  }
+
+  // Demo mode: with no live source configured, hunt the demo feed so "Run now"
+  // still demonstrates the workflow (finds are labeled "Demo" by the trust layer).
+  const demoMode = !KEEPA_LIVE && !useWeb;
+  if (demoMode && pool.length === 0) {
+    pool = generateDeals(Math.floor(Math.random() * 1_000_000), 24);
   }
 
   const seen = new Set(await getJSON<string[]>(K.seen, []));
@@ -78,6 +87,7 @@ export async function runAutopilot(opts?: { web?: boolean }): Promise<{ findings
     store: storeConfigured ? "kv" : "memory",
     keepaLive: KEEPA_LIVE,
     aiWeb: useWeb,
+    demo: demoMode,
   };
   await setJSON(K.findings, findings);
 

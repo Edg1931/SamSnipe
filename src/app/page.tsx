@@ -107,6 +107,11 @@ export default function Home() {
     setExemptBrands(next);
     saveExemptBrands(next);
   }
+  function handleExemptBrand(brand: string) {
+    if (!exemptBrands.some((b) => b.toLowerCase() === brand.toLowerCase())) {
+      updateBrands([...exemptBrands, brand].sort((a, b) => a.localeCompare(b)));
+    }
+  }
 
   function updateSites(next: TargetSite[]) {
     setSites(next);
@@ -370,9 +375,11 @@ export default function Home() {
         <DealDetail
           deal={selected}
           inBuyList={buyList.some((i) => i.deal.id === selected.id)}
+          exempted={isExempt(selected.brand, exemptBrands)}
           onClose={() => setSelected(null)}
           onAddToBuyList={handleAddToBuyList}
           onPass={handlePass}
+          onExemptBrand={handleExemptBrand}
         />
       )}
 

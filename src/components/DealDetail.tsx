@@ -5,8 +5,9 @@ import type { Deal } from "@/lib/types";
 import { usd, compact, RISK_LABELS } from "@/lib/format";
 import { calcProfit } from "@/lib/profit";
 import { estimateVelocity } from "@/lib/velocity";
+import { computeSurvival, SURVIVAL_COLOR } from "@/lib/survival";
 import { resolveSourceUrl, amazonUrl } from "@/lib/links";
-import { ConfidenceRing, VerdictBadge, RiskChip } from "./Badges";
+import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
 import { Sparkline } from "./Sparkline";
 
 interface AIVerdict {
@@ -21,18 +22,21 @@ interface AIVerdict {
 // Slide-over: full deal breakdown, live AI analysis, sell-through model,
 // what-if profit calculator, real outbound links, and buy-list actions.
 export function DealDetail({
-  deal, inBuyList, onClose, onAddToBuyList, onPass,
+  deal, inBuyList, exempted, onClose, onAddToBuyList, onPass, onExemptBrand,
 }: {
   deal: Deal;
   inBuyList: boolean;
+  exempted: boolean;
   onClose: () => void;
   onAddToBuyList: (deal: Deal) => void;
   onPass: (deal: Deal) => void;
+  onExemptBrand: (brand: string) => void;
 }) {
   const [cost, setCost] = useState(deal.sourcePrice);
   const [sell, setSell] = useState(deal.amazonPrice);
   const p = calcProfit({ cost, sellPrice: sell, category: deal.category });
   const v = estimateVelocity(deal);
+  const survival = computeSurvival(deal);
 
   const [ai, setAi] = useState<AIVerdict | null>(null);
   const [aiLoading, setAiLoading] = useState(true);
@@ -89,6 +93,40 @@ export function DealDetail({
           <VerdictBadge verdict={deal.verdict} />
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-text-dim">{deal.match.rationale}</p>
+
+        {/* Account-survival score */}
+        <div
+          className="mt-4 rounded-xl border p-3"
+          style={{ borderColor: `${SURVIVAL_COLOR[survival.band]}40`, background: `${SURVIVAL_COLOR[survival.band]}0d` }}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: SURVIVAL_COLOR[survival.band] }}>
+              <ShieldIcon /> Account-survival score
+            </div>
+            <SurvivalShield score={survival.score} band={survival.band} size="lg" showLabel />
+          </div>
+          <p className="mt-1.5 text-[12px] text-text">{survival.headline}</p>
+          <ul className="mt-2 space-y-1">
+            {survival.factors.filter((f) => f.impact < 0).map((f, i) => (
+              <li key={i} className="flex items-start justify-between gap-2 text-[11px]">
+                <span className="text-text-dim">• {f.detail}</span>
+                <span className="shrink-0 font-mono text-[#f88aa1]">{f.impact}</span>
+              </li>
+            ))}
+            {survival.factors.every((f) => f.impact >= 0) && (
+              <li className="text-[11px] text-text-dim">• No account-safety red flags detected.</li>
+            )}
+          </ul>
+          {survival.suggestExemptBrand && (
+            <button
+              onClick={() => onExemptBrand(survival.suggestExemptBrand!)}
+              disabled={exempted}
+              className="mt-2.5 w-full rounded-lg border border-danger/30 bg-danger/10 py-2 text-[12px] font-medium text-[#f88aa1] transition hover:bg-danger/15 disabled:opacity-50"
+            >
+              {exempted ? `✓ ${survival.suggestExemptBrand} exempted` : `Exempt ${survival.suggestExemptBrand} from future scans`}
+            </button>
+          )}
+        </div>
 
         {/* AI analysis */}
         <div className="mt-4 rounded-xl border border-accent/20 bg-accent/5 p-3">
@@ -261,6 +299,14 @@ function Spark() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
       <path d="M12 2l2.4 6.9L21 11l-6.6 2.1L12 20l-2.4-6.9L3 11l6.6-2.1L12 2z" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2l8 3v6c0 5-3.4 9.3-8 11-4.6-1.7-8-6-8-11V5l8-3z" />
     </svg>
   );
 }

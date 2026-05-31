@@ -145,6 +145,55 @@ export async function parseBrief(text: string): Promise<ParsedQuery> {
   }
 }
 
+// --- Invoice extraction (Claude vision) for the compliance vault ---
+export interface ExtractedInvoice {
+  supplier: string;
+  purchaseDate: string; // ISO or ""
+  units: number;
+  amount: number;
+  source: "ai" | "manual";
+}
+
+const INVOICE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    supplier: { type: "string" },
+    purchaseDate: { type: "string" },
+    units: { type: "integer" },
+    amount: { type: "number" },
+  },
+  required: ["supplier", "purchaseDate", "units", "amount"],
+} as const;
+
+export async function extractInvoice(
+  base64: string,
+  mediaType: string
+): Promise<ExtractedInvoice> {
+  const blank: ExtractedInvoice = { supplier: "", purchaseDate: "", units: 0, amount: 0, source: "manual" };
+  if (!aiEnabled()) return blank;
+  try {
+    const isPdf = mediaType === "application/pdf";
+    const doc = isPdf
+      ? { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: base64 } }
+      : { type: "image" as const, source: { type: "base64" as const, media_type: mediaType as "image/png" | "image/jpeg" | "image/webp", data: base64 } };
+    const res = await client().messages.create({
+      model: MODEL,
+      max_tokens: 512,
+      thinking: { type: "disabled" },
+      system: [{ type: "text", text: "Extract structured fields from a supplier invoice for an Amazon reseller's compliance records. Return the supplier/vendor name, the purchase/invoice date (ISO YYYY-MM-DD if possible), the total number of units purchased, and the total invoice amount in USD. Use 0 / empty string if a field is not present." }],
+      output_config: { format: { type: "json_schema", schema: INVOICE_SCHEMA } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "user", content: [doc as any, { type: "text", text: "Extract the invoice fields." }] }],
+    });
+    const block = res.content.find((b) => b.type === "text");
+    const p = JSON.parse((block as { text: string }).text);
+    return { ...p, source: "ai" };
+  } catch {
+    return blank;
+  }
+}
+
 export interface CopilotTurn {
   role: "user" | "assistant";
   content: string;

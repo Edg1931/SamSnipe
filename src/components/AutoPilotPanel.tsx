@@ -1,31 +1,77 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Deal } from "@/lib/types";
 import type { SavedSearch } from "@/lib/autopilot";
 import { addSearch, matchCount } from "@/lib/autopilot";
+import { timeAgo } from "@/lib/format";
 
-// Control surface for automated deal-finding. Each saved brief shows how many
-// current finds match, and runs in one click.
+interface Findings {
+  ranAt: string; totalNew: number; poolSize: number;
+  store: "kv" | "memory"; keepaLive: boolean; aiWeb: boolean;
+  byWatch: { name: string; count: number }[];
+}
+
 export function AutoPilotPanel({
-  searches, deals, onChange, onRun, onClose,
+  searches, deals, onChange, onRun, onClose, onAddFindings,
 }: {
   searches: SavedSearch[];
   deals: Deal[];
   onChange: (s: SavedSearch[]) => void;
   onRun: (query: string) => void;
   onClose: () => void;
+  onAddFindings: (deals: Deal[]) => void;
 }) {
   const [name, setName] = useState("");
   const [query, setQuery] = useState("");
+  const [findings, setFindings] = useState<Findings | null>(null);
+  const [inbox, setInbox] = useState<Deal[]>([]);
+  const [storeOn, setStoreOn] = useState(false);
+  const [running, setRunning] = useState(false);
+
+  // Keep the server's watch list in sync (so the cron knows what to hunt).
+  function persist(next: SavedSearch[]) {
+    onChange(next);
+    fetch("/api/watches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ searches: next }) }).catch(() => {});
+  }
+
+  async function loadFindings() {
+    try {
+      const r = await fetch("/api/autopilot/findings");
+      const d = await r.json();
+      setFindings(d.findings ?? null);
+      setInbox(Array.isArray(d.inbox) ? d.inbox : []);
+      setStoreOn(Boolean(d.storeConfigured));
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      loadFindings();
+      // push current watches up once on open so the cron knows them
+      fetch("/api/watches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ searches }) }).catch(() => {});
+    }, 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function runNow() {
+    setRunning(true);
+    try {
+      await fetch("/api/autopilot/run", { method: "POST" });
+      await loadFindings();
+    } finally {
+      setRunning(false);
+    }
+  }
 
   const add = () => {
     if (!query.trim()) return;
-    onChange(addSearch(searches, name, query));
+    persist(addSearch(searches, name, query));
     setName(""); setQuery("");
   };
-  const toggle = (id: string) => onChange(searches.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
-  const remove = (id: string) => onChange(searches.filter((s) => s.id !== id));
+  const toggle = (id: string) => persist(searches.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
+  const remove = (id: string) => persist(searches.filter((s) => s.id !== id));
 
   const liveBuys = searches.filter((s) => s.enabled).reduce((a, s) => a + matchCount(s, deals).buys, 0);
 
@@ -39,13 +85,55 @@ export function AutoPilotPanel({
               <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/15 text-accent">⚡</span>
               Auto-Pilot
             </h2>
-            <p className="mt-0.5 text-[11px] text-text-dim">Saved briefs the agent watches for you.</p>
+            <p className="mt-0.5 text-[11px] text-text-dim">Saved briefs the agent hunts for you — on a schedule.</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-text-dim hover:bg-white/5 hover:text-text">✕</button>
         </div>
 
+        {/* Server status + run */}
+        <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[12px] text-text">
+              <span className={`h-2 w-2 rounded-full ${storeOn ? "bg-accent" : "bg-warn"}`} />
+              {storeOn ? "Background runs active" : "Background storage not configured"}
+            </div>
+            <button onClick={runNow} disabled={running} className="rounded-lg bg-accent px-3 py-1 text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-60">
+              {running ? "Running…" : "Run now"}
+            </button>
+          </div>
+          {findings ? (
+            <p className="mt-2 text-[11px] text-text-dim">
+              Last run {timeAgo(findings.ranAt)} · scanned {findings.poolSize} · <span className="font-semibold text-accent">{findings.totalNew} new</span>
+              {" · "}Keepa {findings.keepaLive ? "live" : "off"} · web {findings.aiWeb ? "on" : "off"}
+            </p>
+          ) : (
+            <p className="mt-2 text-[11px] text-text-faint">No run yet — hit “Run now” or wait for the daily schedule.</p>
+          )}
+          {!storeOn && (
+            <p className="mt-1 text-[10px] text-text-faint">Add Vercel KV (Storage tab) to persist finds across runs and enable the daily cron.</p>
+          )}
+        </div>
+
+        {/* Inbox of found deals */}
+        {inbox.length > 0 && (
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-text-dim">Findings inbox ({inbox.length})</span>
+              <button onClick={() => onAddFindings(inbox)} className="text-[11px] font-medium text-accent hover:underline">Add all to feed</button>
+            </div>
+            <div className="space-y-1.5">
+              {inbox.slice(0, 8).map((d) => (
+                <div key={d.id} className="flex items-center justify-between rounded-lg border border-border bg-black/20 px-2.5 py-1.5 text-[11px]">
+                  <span className="min-w-0 truncate text-text">{d.title}</span>
+                  <span className="shrink-0 pl-2 font-mono text-accent">{d.roi}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-4 rounded-xl border border-accent/20 bg-accent/5 p-3 text-[12px] text-text">
-          <span className="font-semibold text-accent">{liveBuys}</span> BUY-grade finds match your active watches right now.
+          <span className="font-semibold text-accent">{liveBuys}</span> BUY-grade finds match your active watches in the current feed.
         </div>
 
         {/* New watch */}
@@ -75,32 +163,26 @@ export function AutoPilotPanel({
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-[13px] font-medium text-text">{s.name}</span>
-                      {m.buys > 0 && (
-                        <span className="shrink-0 rounded-md bg-accent/15 px-1.5 text-[10px] font-semibold text-accent">{m.buys} BUY now</span>
-                      )}
+                      {m.buys > 0 && <span className="shrink-0 rounded-md bg-accent/15 px-1.5 text-[10px] font-semibold text-accent">{m.buys} BUY now</span>}
                     </div>
                     <p className="mt-0.5 line-clamp-1 text-[11px] text-text-dim">“{s.query}”</p>
-                    <p className="text-[10px] text-text-faint">{m.total} match · {m.buys} BUY-grade</p>
                   </div>
                   <button onClick={() => toggle(s.id)} className={`relative h-5 w-9 shrink-0 rounded-full transition ${s.enabled ? "bg-accent" : "bg-white/15"}`}>
                     <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${s.enabled ? "left-[18px]" : "left-0.5"}`} />
                   </button>
                 </div>
                 <div className="mt-2 flex gap-2">
-                  <button onClick={() => onRun(s.query)} className="flex-1 rounded-lg bg-accent/15 py-1.5 text-[12px] font-semibold text-accent hover:bg-accent/20">Run now</button>
+                  <button onClick={() => onRun(s.query)} className="flex-1 rounded-lg bg-accent/15 py-1.5 text-[12px] font-semibold text-accent hover:bg-accent/20">Run in feed</button>
                   <button onClick={() => remove(s.id)} className="rounded-lg border border-border bg-white/5 px-3 text-[12px] text-text-dim hover:text-danger">Delete</button>
                 </div>
               </div>
             );
           })}
-          {searches.length === 0 && (
-            <p className="rounded-xl border border-dashed border-border py-8 text-center text-[12px] text-text-dim">No watches yet — save a brief above.</p>
-          )}
         </div>
 
         <p className="mt-4 rounded-xl border border-border bg-black/20 p-3 text-[11px] leading-relaxed text-text-dim">
-          Next: enabled watches run on a schedule in the background (Vercel Cron + Supabase) and ping you the moment a new
-          high-ROI, account-safe match appears — true hands-off sourcing.
+          With Vercel KV + a <code className="text-text">CRON_SECRET</code>, enabled watches run automatically every day, dedupe against
+          what you&apos;ve seen, and drop new high-ROI, account-safe finds into this inbox (and email them if you add a Resend key).
         </p>
       </aside>
     </div>

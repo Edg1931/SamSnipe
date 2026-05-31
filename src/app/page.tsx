@@ -638,6 +638,7 @@ export default function Home() {
           onChange={updateSearches}
           onRun={runWatch}
           onClose={() => setShowAutoPilot(false)}
+          onAddFindings={(d) => { setImported((prev) => [...d, ...prev]); setShown(PAGE); }}
         />
       )}
     </div>

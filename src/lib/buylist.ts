@@ -19,12 +19,33 @@ export interface Invoice {
   addedAt: string;
 }
 
+// How you'll fulfill the order — including dropship, where the supplier ships
+// straight to the customer and you never touch the inventory.
+export type Fulfillment = "FBA" | "FBM" | "Dropship";
+
+export interface Tracking {
+  supplierOrderId?: string;
+  carrier?: string;
+  trackingNumber?: string;
+  eta?: string; // ISO date
+}
+
 export interface BuyItem {
   deal: Deal;
   qty: number;
   status: BuyStatus;
   addedAt: string;
   invoice?: Invoice;
+  fulfillment?: Fulfillment; // defaults to FBA
+  tracking?: Tracking;
+}
+
+export function setFulfillment(items: BuyItem[], dealId: string, fulfillment: Fulfillment): BuyItem[] {
+  return items.map((i) => (i.deal.id === dealId ? { ...i, fulfillment } : i));
+}
+
+export function setTracking(items: BuyItem[], dealId: string, tracking: Tracking): BuyItem[] {
+  return items.map((i) => (i.deal.id === dealId ? { ...i, tracking } : i));
 }
 
 export type Defensibility = "ready" | "partial" | "none";

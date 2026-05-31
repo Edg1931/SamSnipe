@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { BuyItem, BuyStatus, Defensibility, Invoice } from "@/lib/buylist";
-import { computeTotals, complianceSummary, defensibilityOf, setInvoice } from "@/lib/buylist";
+import type { BuyItem, BuyStatus, Defensibility, Invoice, Fulfillment } from "@/lib/buylist";
+import { computeTotals, complianceSummary, defensibilityOf, setInvoice, setFulfillment, setTracking } from "@/lib/buylist";
 import { usd } from "@/lib/format";
 import { resolveSourceUrl, amazonUrl } from "@/lib/links";
 
@@ -34,6 +34,7 @@ export function BuyListPanel({
     onChange(items.map((i) => (i.deal.id === id ? { ...i, status } : i)));
   const remove = (id: string) => onChange(items.filter((i) => i.deal.id !== id));
   const saveInvoice = (id: string, inv: Invoice | undefined) => onChange(setInvoice(items, id, inv));
+  const chooseFulfillment = (id: string, f: Fulfillment) => onChange(setFulfillment(items, id, f));
 
   function exportPacket() {
     // A reinstatement packet: everything Amazon asks for during an appeal.
@@ -161,6 +162,32 @@ export function BuyListPanel({
                       <span className="font-semibold text-accent">{usd(i.deal.profit * i.qty)}</span>
                     </div>
                   </div>
+
+                  {/* Fulfillment + dropship tracking */}
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] uppercase tracking-wide text-text-faint">Fulfill</span>
+                    <div className="flex gap-0.5 rounded-lg border border-border bg-black/30 p-0.5">
+                      {(["FBA", "FBM", "Dropship"] as Fulfillment[]).map((f) => (
+                        <button
+                          key={f}
+                          onClick={() => chooseFulfillment(i.deal.id, f)}
+                          className={`rounded-md px-2 py-1 text-[10px] font-medium transition ${
+                            (i.fulfillment ?? "FBA") === f ? "bg-accent/15 text-accent" : "text-text-faint hover:text-text"
+                          }`}
+                        >
+                          {f}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {(i.fulfillment === "Dropship" || i.fulfillment === "FBM") && (
+                    <div className="mt-2 grid grid-cols-2 gap-1.5">
+                      <TrackInput label="Supplier order #" value={i.tracking?.supplierOrderId ?? ""} onChange={(v) => onChange(setTracking(items, i.deal.id, { ...i.tracking, supplierOrderId: v }))} />
+                      <TrackInput label="Carrier" value={i.tracking?.carrier ?? ""} onChange={(v) => onChange(setTracking(items, i.deal.id, { ...i.tracking, carrier: v }))} />
+                      <TrackInput label="Tracking #" value={i.tracking?.trackingNumber ?? ""} onChange={(v) => onChange(setTracking(items, i.deal.id, { ...i.tracking, trackingNumber: v }))} />
+                      <TrackInput label="ETA" value={i.tracking?.eta ?? ""} onChange={(v) => onChange(setTracking(items, i.deal.id, { ...i.tracking, eta: v }))} placeholder="YYYY-MM-DD" />
+                    </div>
+                  )}
 
                   {/* Compliance row */}
                   <div className="mt-2.5 flex items-center justify-between border-t border-border-soft pt-2.5">
@@ -307,6 +334,18 @@ function LabeledNumber({ label, value, onChange }: { label: string; value: numbe
       <input
         type="number" value={value} onChange={(e) => onChange(+e.target.value)}
         className="mt-0.5 w-full rounded-md border border-border bg-black/30 px-2 py-1.5 text-[12px] text-text outline-none focus:border-accent/50"
+      />
+    </label>
+  );
+}
+
+function TrackInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <label className="block">
+      <span className="text-[9px] uppercase tracking-wide text-text-faint">{label}</span>
+      <input
+        value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+        className="mt-0.5 w-full rounded-md border border-border bg-black/30 px-2 py-1 text-[11px] text-text placeholder:text-text-faint outline-none focus:border-accent/50"
       />
     </label>
   );

@@ -5,8 +5,10 @@
 // to an in-process Map otherwise — fine for local dev, but not shared across
 // serverless invocations, so the scheduled cron needs real KV to be useful.
 
-const URL = process.env.KV_REST_API_URL;
-const TOKEN = process.env.KV_REST_API_TOKEN;
+// Accept both naming conventions: Vercel KV / Marketplace Redis inject KV_*,
+// while a direct Upstash integration injects UPSTASH_REDIS_REST_*. Either works.
+const URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 export const storeConfigured = Boolean(URL && TOKEN);
 
 const mem = new Map<string, string>();

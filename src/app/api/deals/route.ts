@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { generateDeals } from "@/lib/mockData";
 import { applyQuery } from "@/lib/search";
 import { parseBrief, aiEnabled } from "@/lib/ai";
-import { KEEPA_LIVE, liveDeals } from "@/lib/keepa";
+import { KEEPA_LIVE, KEEPA_KEY_PRESENT, liveDeals } from "@/lib/keepa";
 import type { Deal } from "@/lib/types";
 
 // GET /api/deals?q=...&seed=...&sites=walmart.com,target.com&ai=1
@@ -32,5 +32,12 @@ export async function GET(req: Request) {
   const parsed = await parseBrief(q);
   if (q.trim()) deals = applyQuery(deals, parsed);
 
-  return NextResponse.json({ deals, parsed, dataSource: source, ai: aiEnabled() });
+  return NextResponse.json({
+    deals,
+    parsed,
+    dataSource: source,
+    ai: aiEnabled(),
+    keepaKey: KEEPA_KEY_PRESENT,
+    keepaLive: KEEPA_LIVE,
+  });
 }

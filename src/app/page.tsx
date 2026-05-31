@@ -74,6 +74,7 @@ export default function Home() {
   const [showBuyList, setShowBuyList] = useState(false);
   const [showCopilot, setShowCopilot] = useState(false);
   const [aiOn, setAiOn] = useState(false);
+  const [keepaKey, setKeepaKey] = useState(false);
   const [bought, setBought] = useState<string[]>([]);
   const [passed, setPassed] = useState<string[]>([]);
 
@@ -102,6 +103,7 @@ export default function Home() {
       setUnderstood(Array.isArray(data.parsed?.understood) ? data.parsed.understood : []);
       setDataSource(data.dataSource ?? "mock");
       setAiOn(Boolean(data.ai));
+      setKeepaKey(Boolean(data.keepaKey));
     } catch {
       setDeals([]);
     } finally {
@@ -326,9 +328,14 @@ export default function Home() {
           <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-bg-card/60 px-4 py-2.5 text-[11px]">
             <div className="flex items-center gap-2 text-text-dim">
               <span className={`h-2 w-2 rounded-full ${dataSource === "mock" ? "bg-warn" : "bg-accent"}`} />
-              {dataSource === "mock"
-                ? "Demo mode — realistic mock data. Add a Keepa API key to source live deals."
-                : "Live — powered by Keepa (Amazon US)."}
+              {dataSource !== "mock" ? (
+                "Live — powered by Keepa (Amazon US)."
+              ) : keepaKey ? (
+                <>Keepa key detected but no live deals came back —{" "}
+                  <a href="/api/keepa-status" target="_blank" rel="noopener noreferrer" className="text-accent underline">run diagnostics</a>.</>
+              ) : (
+                "Demo mode — realistic mock data. Add a Keepa API key to source live deals."
+              )}
             </div>
             <div className="flex items-center gap-3">
               <span className="flex items-center gap-1.5 text-text-faint">

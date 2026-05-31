@@ -14,8 +14,13 @@ import type { Deal, PricePoint, RiskFlag } from "./types";
 
 const KEEPA_BASE = "https://api.keepa.com";
 const KEY = process.env.KEEPA_API_KEY;
+export const KEEPA_KEY_PRESENT = Boolean(KEY);
 // Live whenever a key is present, unless explicitly disabled.
 export const KEEPA_LIVE = Boolean(KEY) && process.env.KEEPA_LIVE !== "0";
+
+// US best-seller category roots — a reliable source of real ASINs when the
+// Deal endpoint is empty or unavailable on the plan.
+const BESTSELLER_CATS = [165793011, 172282, 1055398, 3375251, 3760901, 3760911];
 
 const DEAL_LIMIT = Math.max(1, Math.min(150, Number(process.env.SAMSNIPE_DEAL_LIMIT || "50")));
 const COST_RATIO = Number(process.env.SAMSNIPE_COST_RATIO || "0.6");
@@ -210,6 +215,21 @@ async function findDealAsins(limit: number): Promise<string[]> {
   return asins.slice(0, limit);
 }
 
+// Best-seller ASINs across popular US categories — robust fallback.
+async function findBestSellerAsins(limit: number): Promise<string[]> {
+  const asins: string[] = [];
+  const per = Math.ceil(limit / BESTSELLER_CATS.length) + 2;
+  for (const cat of BESTSELLER_CATS) {
+    if (asins.length >= limit) break;
+    const data = (await keepaFetch(`/bestsellers?key=${KEY}&domain=1&category=${cat}`)) as
+      | { bestSellersList?: { asinList?: string[] } }
+      | null;
+    const list = data?.bestSellersList?.asinList ?? [];
+    for (const a of list.slice(0, per)) if (a && !asins.includes(a)) asins.push(a);
+  }
+  return asins.slice(0, limit);
+}
+
 function toDeal(p: KeepaProduct, i: number): Deal | null {
   if (!p.currentPrice || p.currentPrice <= 0) return null;
   const amazonPrice = p.currentPrice;
@@ -275,11 +295,47 @@ function toDeal(p: KeepaProduct, i: number): Deal | null {
   };
 }
 
+// Diagnostic: tells you exactly why live data is or isn't flowing.
+export async function keepaStatus(): Promise<Record<string, unknown>> {
+  const keyPresent = KEEPA_KEY_PRESENT;
+  if (!keyPresent) {
+    return { keyPresent: false, live: false, ok: false,
+      reason: "KEEPA_API_KEY is not set in this environment. Add it in Vercel → Settings → Environment Variables (Production), then redeploy." };
+  }
+  // Validate the key + check token balance with one cheap product call.
+  const prod = (await keepaFetch(`/product?key=${KEY}&domain=1&asin=B07RP6F4N8&stats=1`)) as
+    | { tokensLeft?: number; error?: { message?: string }; products?: { title?: string }[] }
+    | null;
+  if (!prod) {
+    return { keyPresent: true, live: KEEPA_LIVE, ok: false,
+      reason: "Keepa request failed — the key may be invalid, out of tokens, or blocked. Check your key at keepa.com/#!api." };
+  }
+  if (prod.error) {
+    return { keyPresent: true, live: KEEPA_LIVE, ok: false, reason: `Keepa error: ${prod.error.message}` };
+  }
+  // How many ASINs each sourcing path yields.
+  const dealAsins = await findDealAsins(10);
+  const bestAsins = dealAsins.length ? [] : await findBestSellerAsins(10);
+  return {
+    keyPresent: true,
+    live: KEEPA_LIVE,
+    ok: true,
+    tokensLeft: prod.tokensLeft,
+    sampleProduct: prod.products?.[0]?.title ?? null,
+    dealEndpointAsins: dealAsins.length,
+    bestSellerAsins: bestAsins.length,
+    willServeLive: KEEPA_LIVE && (dealAsins.length > 0 || bestAsins.length > 0),
+    note: dealAsins.length === 0 ? "Deal endpoint returned 0 — using Best Sellers fallback." : "Deal endpoint working.",
+  };
+}
+
 /** Live deal feed from Keepa. Returns [] when not live or on any failure. */
 export async function liveDeals(limit = DEAL_LIMIT): Promise<Deal[]> {
   if (!KEEPA_LIVE) return [];
   try {
-    const asins = await findDealAsins(limit);
+    let asins = await findDealAsins(limit);
+    // Fall back to best sellers if the Deal endpoint returned nothing.
+    if (asins.length === 0) asins = await findBestSellerAsins(limit);
     if (asins.length === 0) return [];
     const products = await getProducts(asins);
     return products

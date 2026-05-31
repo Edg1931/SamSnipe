@@ -168,6 +168,7 @@ export function generateDeals(seed = 7, count = 14, targets?: ScanTargets): Deal
       roi,
       margin,
       fbaFees: totalFees,
+      feesSource: "estimated",
       verdict,
       verdictReason: reason,
       risks,

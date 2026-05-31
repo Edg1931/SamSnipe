@@ -4,11 +4,13 @@ import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges
 import { Sparkline } from "./Sparkline";
 import { computeSurvival } from "@/lib/survival";
 import { estimateVelocity } from "@/lib/velocity";
+import { assessTrust } from "@/lib/trust";
 
 export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void }) {
   const roiColor = deal.roi >= 40 ? "#10d98e" : deal.roi >= 25 ? "#84cc16" : deal.roi >= 15 ? "#f5a524" : "#f4476b";
   const survival = computeSurvival(deal);
   const v = estimateVelocity(deal);
+  const trust = assessTrust(deal);
   return (
     <button
       onClick={onClick}
@@ -38,11 +40,15 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
             <span className="font-mono text-accent">{deal.match.asin}</span>
             <span className="text-text-faint">·</span>
             <span>{deal.category}</span>
-            {deal.origin !== "scan" && (
-              <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-text-faint">
-                {deal.origin === "import" ? "Imported" : "Web"}
-              </span>
-            )}
+            <span
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-medium"
+              style={{ color: trust.color, background: `${trust.color}1f` }}
+              title={trust.notes.join(" ")}
+            >
+              <span className="h-1 w-1 rounded-full" style={{ background: trust.color }} />
+              {trust.level === "verified" ? "Verified" : trust.level === "lead" ? "Lead" : trust.level === "demo" ? "Demo" : "Est"}
+            </span>
+            {trust.stale && <span className="text-[9px] font-medium text-warn" title="Price may be out of date">⏱ stale</span>}
           </div>
         </div>
       </div>

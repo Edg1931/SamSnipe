@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getJSON, storeConfigured, K } from "@/lib/store";
+import { getJSON, storeConfigured, storeBackend, K } from "@/lib/store";
 import type { Findings } from "@/lib/autopilotRun";
 import type { Deal } from "@/lib/types";
 
@@ -7,5 +7,5 @@ import type { Deal } from "@/lib/types";
 export async function GET() {
   const findings = await getJSON<Findings | null>(K.findings, null);
   const inbox = await getJSON<Deal[]>(K.inbox, []);
-  return NextResponse.json({ findings, inbox, storeConfigured });
+  return NextResponse.json({ findings, inbox, storeConfigured, storeBackend });
 }

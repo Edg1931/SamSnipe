@@ -27,6 +27,7 @@ export function AutoPilotPanel({
   const [findings, setFindings] = useState<Findings | null>(null);
   const [inbox, setInbox] = useState<Deal[]>([]);
   const [storeOn, setStoreOn] = useState(false);
+  const [backend, setBackend] = useState<string>("memory");
   const [running, setRunning] = useState(false);
 
   // Keep the server's watch list in sync (so the cron knows what to hunt).
@@ -42,6 +43,7 @@ export function AutoPilotPanel({
       setFindings(d.findings ?? null);
       setInbox(Array.isArray(d.inbox) ? d.inbox : []);
       setStoreOn(Boolean(d.storeConfigured));
+      if (d.storeBackend) setBackend(d.storeBackend);
     } catch { /* ignore */ }
   }
 
@@ -95,7 +97,7 @@ export function AutoPilotPanel({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-[12px] text-text">
               <span className={`h-2 w-2 rounded-full ${storeOn ? "bg-accent" : "bg-warn"}`} />
-              {storeOn ? "Background runs active" : "Background storage not configured"}
+              {storeOn ? `Background runs active · ${backend}` : "Background storage not configured"}
             </div>
             <button onClick={runNow} disabled={running} className="rounded-lg bg-accent px-3 py-1 text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-60">
               {running ? "Running…" : "Run now"}

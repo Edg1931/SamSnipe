@@ -71,6 +71,7 @@ async function sp(path: string, init?: RequestInit): Promise<Json | null> {
 }
 
 const num = (v: unknown): number => (typeof v === "number" ? v : Number(v) || 0);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Drill into a nested object/array path safely.
 function dig(obj: unknown, ...keys: (string | number)[]): unknown {
   let cur: unknown = obj;
@@ -79,6 +80,22 @@ function dig(obj: unknown, ...keys: (string | number)[]): unknown {
     cur = (cur as Record<string | number, unknown>)[k];
   }
   return cur;
+}
+
+// Parse a FeesEstimate object → { total, referral, fba } (shared single/batch).
+function parseFeesEstimate(estimate: Json | undefined): SpFees | null {
+  if (!estimate) return null;
+  const total = num(dig(estimate, "TotalFeesEstimate", "Amount"));
+  const details = (dig(estimate, "FeeDetailList") as Json[] | undefined) ?? [];
+  let referral = 0, fba = 0, variableClosing = 0;
+  for (const d of details) {
+    const type = String(dig(d, "FeeType") ?? "");
+    const amt = num(dig(d, "FinalFee", "Amount"));
+    if (type === "ReferralFee") referral = amt;
+    else if (type === "FBAFees" || type === "FulfillmentFees") fba = amt;
+    else if (type === "VariableClosingFee") variableClosing = amt;
+  }
+  return total > 0 ? { total: +total.toFixed(2), referral: +referral.toFixed(2), fba: +fba.toFixed(2), variableClosing } : null;
 }
 
 /** Exact FBA + referral fees for an ASIN at a given sell price. */
@@ -95,20 +112,40 @@ export async function getFees(asin: string, price: number): Promise<SpFees | nul
       },
     }),
   });
-  const result = dig(data, "payload", "FeesEstimateResult");
-  const estimate = dig(result, "FeesEstimate") as Json | undefined;
-  if (!estimate) return null;
-  const total = num(dig(estimate, "TotalFeesEstimate", "Amount"));
-  const details = (dig(estimate, "FeeDetailList") as Json[] | undefined) ?? [];
-  let referral = 0, fba = 0, variableClosing = 0;
-  for (const d of details) {
-    const type = String(dig(d, "FeeType") ?? "");
-    const amt = num(dig(d, "FinalFee", "Amount"));
-    if (type === "ReferralFee") referral = amt;
-    else if (type === "FBAFees" || type === "FulfillmentFees") fba = amt;
-    else if (type === "VariableClosingFee") variableClosing = amt;
+  return parseFeesEstimate(dig(data, "payload", "FeesEstimateResult", "FeesEstimate") as Json | undefined);
+}
+
+/** Exact fees for many ASINs in batched calls (up to 20 per request). */
+export async function getFeesBatch(items: { asin: string; price: number }[]): Promise<Map<string, SpFees>> {
+  const out = new Map<string, SpFees>();
+  if (!spApiEnabled()) return out;
+  const valid = items.filter((it) => it.asin && it.asin !== "—" && it.price > 0);
+  for (let i = 0; i < valid.length; i += 20) {
+    if (i > 0) await sleep(400);
+    const chunk = valid.slice(i, i + 20);
+    const data = await sp(`/products/fees/v0/feesEstimate`, {
+      method: "POST",
+      body: JSON.stringify({
+        FeesEstimateByIdRequestList: chunk.map((it) => ({
+          FeesEstimateRequest: {
+            MarketplaceId: MARKETPLACE_ID,
+            IsAmazonFulfilled: true,
+            PriceToEstimateFees: { ListingPrice: { CurrencyCode: "USD", Amount: it.price } },
+            Identifier: it.asin,
+          },
+          IdType: "ASIN",
+          IdValue: it.asin,
+        })),
+      }),
+    });
+    const list = (Array.isArray(data) ? data : dig(data, "payload")) as Json[] | undefined;
+    for (const row of list ?? []) {
+      const asin = String(dig(row, "FeesEstimateIdentifier", "IdValue") ?? "");
+      const fees = parseFeesEstimate(dig(row, "FeesEstimateResult", "FeesEstimate") as Json | undefined);
+      if (asin && fees) out.set(asin, fees);
+    }
   }
-  return total > 0 ? { total: +total.toFixed(2), referral: +referral.toFixed(2), fba: +fba.toFixed(2), variableClosing } : null;
+  return out;
 }
 
 /** Buy Box price + competition (offer counts). */
@@ -220,22 +257,18 @@ export async function applyLiveFees(deals: Deal[], limit: number): Promise<Deal[
     .sort((a, b) => b.roi - a.roi)
     .filter((d) => d.match.asin && d.match.asin !== "—")
     .slice(0, limit);
-  const updates = new Map<string, Deal>();
-  await Promise.all(
-    targets.map(async (d) => {
-      try {
-        const f = await getFees(d.match.asin, d.amazonPrice);
-        if (!f || f.total <= 0) return;
-        const profit = +(d.amazonPrice - d.sourcePrice - f.total).toFixed(2);
-        const roi = d.sourcePrice > 0 ? +((profit / d.sourcePrice) * 100).toFixed(1) : 0;
-        const margin = d.amazonPrice > 0 ? +((profit / d.amazonPrice) * 100).toFixed(1) : 0;
-        updates.set(d.id, { ...d, fbaFees: f.total, feesSource: "spapi", profit, roi, margin });
-      } catch {
-        /* keep the estimate */
-      }
-    })
-  );
-  return updates.size ? deals.map((d) => updates.get(d.id) ?? d) : deals;
+  if (targets.length === 0) return deals;
+  // One batched call per 20 ASINs instead of one call each.
+  const feeMap = await getFeesBatch(targets.map((d) => ({ asin: d.match.asin, price: d.amazonPrice })));
+  if (feeMap.size === 0) return deals;
+  return deals.map((d) => {
+    const f = feeMap.get(d.match.asin);
+    if (!f || f.total <= 0) return d;
+    const profit = +(d.amazonPrice - d.sourcePrice - f.total).toFixed(2);
+    const roi = d.sourcePrice > 0 ? +((profit / d.sourcePrice) * 100).toFixed(1) : 0;
+    const margin = d.amazonPrice > 0 ? +((profit / d.amazonPrice) * 100).toFixed(1) : 0;
+    return { ...d, fbaFees: f.total, feesSource: "spapi", profit, roi, margin };
+  });
 }
 
 /** Everything for a deal's drawer in one call (each piece independent). */

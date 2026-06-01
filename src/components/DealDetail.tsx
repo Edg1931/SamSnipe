@@ -11,7 +11,7 @@ import { computeUngating, type Approvals } from "@/lib/ungating";
 import type { RetailOffer } from "@/lib/retail";
 import { sourceLink, amazonUrl, keepaUrl, amazonSearch, channelUrl } from "@/lib/links";
 import { useEscape } from "@/lib/hooks";
-import { assessTrust } from "@/lib/trust";
+import { assessTrust, verifiedScore } from "@/lib/trust";
 import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
 import { Sparkline } from "./Sparkline";
 
@@ -118,6 +118,7 @@ export function DealDetail({
   }, [deal]);
 
   const trust = assessTrust(deal);
+  const vs = verifiedScore(deal);
   const verified = trust.level === "verified";
   // Only deep-link to a specific Amazon/Keepa listing when the ASIN is
   // Keepa-verified; otherwise /dp/ could 404 or be the wrong product, so search.
@@ -198,6 +199,17 @@ export function DealDetail({
                 {trust.feesSource === "spapi" ? "Amazon-actual (SP-API)" : trust.feesSource === "keepa" ? "Amazon-actual (Keepa)" : "Estimated"}
               </div>
             </div>
+          </div>
+          {/* Live-data coverage */}
+          <div className="mt-2 flex items-center justify-between rounded-lg bg-black/20 px-2.5 py-1.5">
+            <span className="text-[11px] font-medium" style={{ color: vs.color }}>{vs.count} of {vs.total} figures live</span>
+            <span className="flex items-center gap-2 text-[10px]">
+              {vs.items.map((it) => (
+                <span key={it.label} className={it.ok ? "text-accent" : "text-text-faint"}>
+                  {it.ok ? "✓" : "○"} {it.label}
+                </span>
+              ))}
+            </span>
           </div>
           <ul className="mt-2 space-y-0.5">
             {trust.notes.map((n, i) => <li key={i} className="text-[11px] leading-snug text-text-dim">• {n}</li>)}

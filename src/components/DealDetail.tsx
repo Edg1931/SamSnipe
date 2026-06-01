@@ -99,9 +99,12 @@ export function DealDetail({
   const trust = assessTrust(deal);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-stretch lg:justify-end">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <aside className="glass animate-rise relative h-full w-full max-w-md overflow-y-auto border-l border-border p-5">
+      {/* Bottom sheet on phones, right-side drawer on desktop. */}
+      <aside className="glass animate-rise relative max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border-t border-border p-5 lg:h-full lg:max-h-none lg:max-w-md lg:rounded-t-none lg:border-l lg:border-t-0">
+        {/* Grab handle (mobile only) */}
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 lg:hidden" />
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <a href={azUrl} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Open on Amazon">

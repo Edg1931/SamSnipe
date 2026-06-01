@@ -127,6 +127,7 @@ export async function GET() {
     config: {
       keepaLive: KEEPA_LIVE,
       dealLimit: Number(process.env.SAMSNIPE_DEAL_LIMIT || "12"),
+      keepaBatch: Number(process.env.SAMSNIPE_KEEPA_BATCH || "50"),
       minSafety: Number(process.env.AUTOPILOT_MIN_SAFETY || "60"),
       cronSecret: Boolean(process.env.CRON_SECRET),
       aiModel: aiModel(),

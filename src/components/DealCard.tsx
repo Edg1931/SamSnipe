@@ -1,4 +1,4 @@
-import type { MouseEvent } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import type { Deal } from "@/lib/types";
 import { usd, timeAgo, compact } from "@/lib/format";
 import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
@@ -6,6 +6,7 @@ import { Sparkline } from "./Sparkline";
 import { computeSurvival } from "@/lib/survival";
 import { estimateVelocity } from "@/lib/velocity";
 import { assessTrust } from "@/lib/trust";
+import { dealScore, SCORE_COLOR, scoreGrade } from "@/lib/score";
 import { resolveSourceUrl, amazonUrl, keepaUrl, amazonSearch } from "@/lib/links";
 
 export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void }) {
@@ -13,6 +14,17 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
   const survival = computeSurvival(deal);
   const v = estimateVelocity(deal);
   const trust = assessTrust(deal);
+  const sc = dealScore(deal);
+  const grade = scoreGrade(sc.score);
+  const gradeColor = SCORE_COLOR[sc.band];
+  // "Real data" confidence ticks — which figures are confirmed vs estimated.
+  const ticks = [
+    trust.level === "verified" && "Keepa",
+    deal.feesSource === "keepa" && "Fees",
+    deal.costSource === "live" && "Cost",
+  ].filter(Boolean) as string[];
+  // Entry-quality: is the current Amazon price below its 90-day average?
+  const priceTrend = deal.avg90 ? (deal.amazonPrice <= deal.avg90 ? "below" : "above") : null;
   const srcUrl = resolveSourceUrl({ source: deal.source, title: deal.title, sourceUrl: deal.sourceUrl });
   const azUrl = amazonUrl(deal.match.asin) ?? amazonSearch(`${deal.brand} ${deal.title}`);
   const keUrl = keepaUrl(deal.match.asin);
@@ -41,6 +53,13 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-[13px] font-semibold text-text">{deal.title}</span>
             <div className="flex shrink-0 items-center gap-1.5">
+              <span
+                title={`Deal Score ${sc.score}/100 — ROI, account safety & demand`}
+                className="grid h-6 min-w-6 place-items-center rounded-md px-1 text-[11px] font-extrabold"
+                style={{ color: gradeColor, background: `${gradeColor}1f` }}
+              >
+                {grade}
+              </span>
               <SurvivalShield score={survival.score} band={survival.band} />
               <VerdictBadge verdict={deal.verdict} />
             </div>
@@ -65,10 +84,17 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
       <div className="mt-3 flex items-center gap-3">
         <ConfidenceRing match={deal.match} />
         <div className="flex-1">
-          <div className="flex items-baseline justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] text-text-faint">ASIN match</span>
-            <span className="text-[11px] text-text-dim">
-              {deal.match.packSizeWarning ? "⚠ verify pack size" : "verified"}
+            <span className="flex items-center gap-1.5 text-[10px]">
+              {deal.match.packSizeWarning && <span className="font-medium text-warn" title="Pack/quantity may differ between source and listing">⚠ pack</span>}
+              {ticks.length > 0 ? (
+                ticks.map((t) => (
+                  <span key={t} className="font-medium text-accent" title="Confirmed from a real data source">✓ {t}</span>
+                ))
+              ) : (
+                <span className="text-text-faint" title="These figures are modeled estimates">estimates</span>
+              )}
             </span>
           </div>
           <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-text-dim">{deal.match.rationale}</p>
@@ -77,7 +103,15 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
 
       <div className="mt-3 grid grid-cols-4 gap-2 rounded-xl bg-black/20 p-2.5">
         <Stat label="Cost" value={usd(deal.sourcePrice)} sub={deal.costSource === "live" ? `${deal.source} · live` : deal.source} />
-        <Stat label="Sells" value={usd(deal.amazonPrice)} sub="Amazon" />
+        <Stat
+          label="Sells"
+          value={usd(deal.amazonPrice)}
+          sub={priceTrend ? (
+            <span style={{ color: priceTrend === "below" ? "#10d98e" : "#f5a524" }} title={`90-day avg ${usd(deal.avg90!)}`}>
+              {priceTrend === "below" ? "↓ below avg" : "↑ above avg"}
+            </span>
+          ) : "Amazon"}
+        />
         <Stat label="Profit" value={usd(deal.profit)} sub={`${deal.margin}% margin`} accent="#e8edf4" />
         <Stat label="ROI" value={`${deal.roi}%`} sub={`${usd(deal.fbaFees)} fees`} accent={roiColor} />
       </div>
@@ -123,7 +157,7 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
   );
 }
 
-function Stat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+function Stat({ label, value, sub, accent }: { label: string; value: string; sub?: ReactNode; accent?: string }) {
   return (
     <div className="min-w-0">
       <div className="text-[10px] uppercase tracking-wide text-text-faint">{label}</div>

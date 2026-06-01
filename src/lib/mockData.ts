@@ -182,6 +182,9 @@ export function generateDeals(seed = 7, count = 14, targets?: ScanTargets): Deal
       sourceUrl: sourceSearchUrl(site, prod.title),
       sourcePrice,
       amazonPrice,
+      // 90-day avg drifts around the current price so the entry-quality (below/
+      // above average) signal is demonstrable in demo too.
+      avg90: +(amazonPrice * (0.9 + rng() * 0.2)).toFixed(2),
       bsr,
       bsrCategory: prod.category,
       monthlySales: Math.max(1, Math.floor(40000 / Math.sqrt(bsr + 50))),

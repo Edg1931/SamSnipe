@@ -330,6 +330,11 @@ export function DealDetail({
                 );
               })}
               <p className="pt-1 text-[10px] text-text-faint">Tap a row to price the calculator against that source · ↗ opens the retailer to verify the price.</p>
+              {retailSrc === "mock" && (
+                <p className="text-[10px] leading-snug text-warn/90">
+                  Estimated prices (modeled from the Amazon price), so links go to a search to find the item. Enable a live retailer feed (SerpApi) for exact prices and direct product links.
+                </p>
+              )}
             </div>
           ) : (
             <p className="text-[11px] text-text-dim">No retailer matches found — verify the item manually.</p>

@@ -60,8 +60,10 @@ export function assessTrust(deal: Deal, now = Date.now()): Trust {
   if (level === "demo") notes.push("Illustrative demo data — connect Keepa for real numbers before buying.");
   notes.push(feesSource === "keepa" ? "Fees are Amazon-actual (Keepa)." : "Fees are estimated from category rates.");
   // Buy-side provenance: the sell price comes from Keepa, but the source/buy
-  // price (and therefore ROI) is modeled unless it's your own imported cost.
-  if (deal.origin === "import") notes.push("Buy cost is from your imported file.");
+  // price (and therefore ROI) is modeled unless it's a live retailer price or
+  // your own imported cost.
+  if (deal.costSource === "live") notes.push("Buy price is a live retailer price (SerpApi) — the source link goes to the actual listing.");
+  else if (deal.costSource === "import" || deal.origin === "import") notes.push("Buy cost is from your imported file.");
   else notes.push("Buy price is an estimate (modeled from the Amazon price) — verify at the source before buying, or enable a live retailer feed.");
   if (stale) notes.push(`Latest price is ${priceAgeDays} days old — re-check before committing.`);
 

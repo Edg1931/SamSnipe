@@ -156,6 +156,7 @@ export function rowsToDeals(rows: Record<string, unknown>[], sourceLabel = "Impo
       margin,
       fbaFees: totalFees,
       feesSource: "estimated",
+      costSource: "import",
       verdict,
       verdictReason: reason,
       risks,

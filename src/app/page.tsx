@@ -55,7 +55,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [discovering, setDiscovering] = useState(false);
-  const [seed, setSeed] = useState(7);
+  // Seed from the calendar day so the demo feed rotates daily (live Keepa data
+  // refreshes on its own); a scan bumps it for a fresh set on demand.
+  const [seed, setSeed] = useState(() => Math.floor(Date.now() / 86_400_000) % 100_000);
   const [filter, setFilter] = useState<Filter>("ALL");
   const [selected, setSelected] = useState<Deal | null>(null);
 

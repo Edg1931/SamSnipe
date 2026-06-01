@@ -194,8 +194,8 @@ export function DealDetail({
             </div>
             <div className="rounded-lg bg-black/20 px-2.5 py-1.5">
               <div className="text-text-faint">Fees</div>
-              <div className="font-medium" style={{ color: trust.feesSource === "keepa" ? "#10d98e" : "#f5a524" }}>
-                {trust.feesSource === "keepa" ? "Amazon-actual (Keepa)" : "Estimated"}
+              <div className="font-medium" style={{ color: trust.feesSource !== "estimated" ? "#10d98e" : "#f5a524" }}>
+                {trust.feesSource === "spapi" ? "Amazon-actual (SP-API)" : trust.feesSource === "keepa" ? "Amazon-actual (Keepa)" : "Estimated"}
               </div>
             </div>
           </div>
@@ -420,9 +420,9 @@ export function DealDetail({
         <div className="mb-4 break-inside-avoid rounded-xl border border-border bg-black/20 p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-text-dim">Profit calculator</div>
           <p className="mb-3 mt-0.5 text-[10px] text-text-faint">
-            {trust.feesSource === "keepa"
-              ? "This deal's fees are Amazon-actual (Keepa). What-if recalcs below use category-rate estimates."
-              : "Fees estimated from category rates — connect Keepa for Amazon-actual fees."}
+            {trust.feesSource !== "estimated"
+              ? `This deal's fees are Amazon-actual (${trust.feesSource === "spapi" ? "SP-API" : "Keepa"}). What-if recalcs below use category-rate estimates.`
+              : "Fees estimated from category rates — connect SP-API or Keepa for Amazon-actual fees."}
           </p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Your cost" value={cost} onChange={setCost} />

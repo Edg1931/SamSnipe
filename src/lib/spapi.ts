@@ -6,6 +6,8 @@
 // call degrades to null on any failure or when unconfigured, so the app keeps
 // working on estimates without it.
 
+import type { Deal } from "./types";
+
 const CLIENT_ID = process.env.SPAPI_CLIENT_ID;
 const CLIENT_SECRET = process.env.SPAPI_CLIENT_SECRET;
 const REFRESH_TOKEN = process.env.SPAPI_REFRESH_TOKEN;
@@ -205,6 +207,35 @@ export async function resolveAmazon(q: { upc?: string; title: string; brand?: st
     price,
     offerCount: bb?.offerCount ?? 0,
   };
+}
+
+/**
+ * Replace the estimated fees on the top deals with EXACT Amazon fees (SP-API),
+ * recomputing profit/ROI. Skips deals without a real ASIN (returns null). Capped
+ * to keep latency/rate-limits sane; only runs when SP-API is configured.
+ */
+export async function applyLiveFees(deals: Deal[], limit: number): Promise<Deal[]> {
+  if (!spApiEnabled() || deals.length === 0 || limit <= 0) return deals;
+  const targets = [...deals]
+    .sort((a, b) => b.roi - a.roi)
+    .filter((d) => d.match.asin && d.match.asin !== "—")
+    .slice(0, limit);
+  const updates = new Map<string, Deal>();
+  await Promise.all(
+    targets.map(async (d) => {
+      try {
+        const f = await getFees(d.match.asin, d.amazonPrice);
+        if (!f || f.total <= 0) return;
+        const profit = +(d.amazonPrice - d.sourcePrice - f.total).toFixed(2);
+        const roi = d.sourcePrice > 0 ? +((profit / d.sourcePrice) * 100).toFixed(1) : 0;
+        const margin = d.amazonPrice > 0 ? +((profit / d.amazonPrice) * 100).toFixed(1) : 0;
+        updates.set(d.id, { ...d, fbaFees: f.total, feesSource: "spapi", profit, roi, margin });
+      } catch {
+        /* keep the estimate */
+      }
+    })
+  );
+  return updates.size ? deals.map((d) => updates.get(d.id) ?? d) : deals;
 }
 
 /** Everything for a deal's drawer in one call (each piece independent). */

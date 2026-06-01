@@ -72,8 +72,8 @@ export interface Deal {
   roi: number; // % (computed)
   margin: number; // % (computed)
   fbaFees: number;
-  /** Whether the fee figures are Amazon-accurate (Keepa) or our estimate. */
-  feesSource?: "keepa" | "estimated";
+  /** Where fee figures come from: Amazon-actual (SP-API or Keepa) or our estimate. */
+  feesSource?: "keepa" | "spapi" | "estimated";
   /** Where the buy/source price came from: a live retailer listing, your import, or our estimate. */
   costSource?: "live" | "estimated" | "import";
 

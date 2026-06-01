@@ -266,8 +266,12 @@ currently in-stock, discounted or clearance products that could resell for a pro
 Only include products you actually found with a real source URL and a real current price.
 Favor items likely to have a strong Amazon Best Sellers Rank.`;
 
-export async function discoverDeals(brief?: string): Promise<{ candidates: DiscoveredDeal[]; source: "ai" | "offline" }> {
+export async function discoverDeals(
+  opts: { brief?: string; targets?: string[]; sites?: string[] } = {}
+): Promise<{ candidates: DiscoveredDeal[]; source: "ai" | "offline" }> {
   if (!aiEnabled()) return { candidates: [], source: "offline" };
+  const focus = [opts.brief, ...(opts.targets ?? [])].map((s) => s?.trim()).filter(Boolean) as string[];
+  const sites = (opts.sites ?? []).map((s) => s.trim()).filter(Boolean);
   try {
     const res = await client().messages.create({
       model: MODEL,
@@ -279,7 +283,9 @@ export async function discoverDeals(brief?: string): Promise<{ candidates: Disco
       messages: [{
         role: "user",
         content:
-          `${brief ? `Focus on: ${brief}. ` : ""}Search the web right now and find 10-12 real discounted/clearance products at US retailers with Amazon resale potential. ` +
+          (focus.length ? `Prioritize these specific items / briefs the user is hunting for: ${focus.join("; ")}. ` : "") +
+          (sites.length ? `Focus your searches on these retailers when possible: ${sites.join(", ")}. ` : "") +
+          `Search the web right now and find 10-12 real discounted/clearance products at US retailers with Amazon resale potential. ` +
           `Return ONLY a JSON array (no prose, no markdown fences): ` +
           `[{"title": string, "brand": string, "retailer": string, "sourcePrice": number, "sourceUrl": string, "category": string, "upc": string optional}]`,
       }],

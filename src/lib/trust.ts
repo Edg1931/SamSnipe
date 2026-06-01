@@ -14,7 +14,7 @@ export interface Trust {
   pricedAt: string | null;
   priceAgeDays: number | null;
   stale: boolean; // price older than a week
-  feesSource: "keepa" | "estimated";
+  feesSource: "keepa" | "spapi" | "estimated";
   fetchedAgoMin: number;
   notes: string[];
 }
@@ -58,7 +58,8 @@ export function assessTrust(deal: Deal, now = Date.now()): Trust {
   if (level === "verified") notes.push("ASIN, price & BSR verified against Keepa (Amazon US).");
   if (level === "lead") notes.push("Found by AI web search — connect/repair Keepa to verify the ASIN & Amazon price.");
   if (level === "demo") notes.push("Illustrative demo data — connect Keepa for real numbers before buying.");
-  notes.push(feesSource === "keepa" ? "Fees are Amazon-actual (Keepa)." : "Fees are estimated from category rates.");
+  const realFees = feesSource === "keepa" || feesSource === "spapi";
+  notes.push(realFees ? `Fees are Amazon-actual (${feesSource === "spapi" ? "SP-API" : "Keepa"}).` : "Fees are estimated from category rates.");
   // Buy-side provenance: the sell price comes from Keepa, but the source/buy
   // price (and therefore ROI) is modeled unless it's a live retailer price or
   // your own imported cost.

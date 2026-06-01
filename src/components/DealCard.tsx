@@ -20,7 +20,7 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
   // "Real data" confidence ticks — which figures are confirmed vs estimated.
   const ticks = [
     trust.level === "verified" && "Keepa",
-    deal.feesSource === "keepa" && "Fees",
+    (deal.feesSource === "keepa" || deal.feesSource === "spapi") && "Fees",
     deal.costSource === "live" && "Cost",
   ].filter(Boolean) as string[];
   // Entry-quality: is the current Amazon price below its 90-day average?

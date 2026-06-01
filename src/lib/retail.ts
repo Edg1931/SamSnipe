@@ -3,8 +3,9 @@
 // Keepa tells us the Amazon (sell) side; this tells us what a product actually
 // costs at retailers (the buy side), so the spread is genuine instead of a flat
 // estimate. Pluggable providers:
-//   • live  — SerpApi (Walmart / Home Depot / eBay engines) when SERPAPI_KEY +
-//             RETAIL_LIVE=1 are set. Real prices, stock, and listing URLs.
+//   • live  — SerpApi (Google Shopping + Walmart / Home Depot / eBay engines)
+//             when SERPAPI_KEY + RETAIL_LIVE=1 are set. Real prices, retailers,
+//             and direct product links for the actual item.
 //   • mock  — deterministic, reference-based prices across retailers so the
 //             feature works fully offline.
 //
@@ -129,10 +130,59 @@ function parseSerp(engine: string, data: Record<string, unknown>): SerpResult | 
   return null;
 }
 
+function parsePrice(s?: string): number {
+  if (!s) return 0;
+  const m = s.replace(/,/g, "").match(/[\d.]+/);
+  return m ? parseFloat(m[0]) : 0;
+}
+
+// Google Shopping aggregates real listings across many retailers, each with a
+// price and a direct product link — the best single source for "what does this
+// exact item actually cost, and where."
+async function googleShoppingOffers(q: RetailQuery): Promise<RetailOffer[]> {
+  if (!SERP_KEY) return [];
+  const query = encodeURIComponent(`${q.brand ?? ""} ${q.title}`.trim());
+  const url = `https://serpapi.com/search.json?engine=google_shopping&q=${query}&gl=us&hl=en&api_key=${SERP_KEY}`;
+  try {
+    const res = await fetch(url, { next: { revalidate: 600 } });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { shopping_results?: Record<string, unknown>[] };
+    const offers: RetailOffer[] = [];
+    for (const r of (data.shopping_results ?? []).slice(0, 12)) {
+      const price = typeof r.extracted_price === "number" ? r.extracted_price : parsePrice(r.price as string);
+      const link = (r.link as string) || (r.product_link as string);
+      if (!price || price <= 0 || !link) continue;
+      offers.push({
+        retailer: (r.source as string) || "Store",
+        price: +price.toFixed(2),
+        url: link,
+        inStock: true,
+        clearance: false,
+        title: r.title as string,
+        provider: "live",
+      });
+    }
+    return offers;
+  } catch {
+    return [];
+  }
+}
+
 async function liveOffers(q: RetailQuery): Promise<RetailOffer[]> {
   const engines: [string, string][] = [["walmart", "Walmart"], ["home_depot", "Home Depot"], ["ebay", "eBay"]];
-  const results = await Promise.all(engines.map(([e, r]) => serpEngine(e, r, q)));
-  return results.filter((o): o is RetailOffer => Boolean(o)).sort((a, b) => a.price - b.price);
+  const [single, shopping] = await Promise.all([
+    Promise.all(engines.map(([e, r]) => serpEngine(e, r, q))),
+    googleShoppingOffers(q),
+  ]);
+  const all = [...single.filter((o): o is RetailOffer => Boolean(o)), ...shopping];
+  // Dedupe by retailer, keeping the cheapest offer from each.
+  const byRetailer = new Map<string, RetailOffer>();
+  for (const o of all) {
+    const key = o.retailer.toLowerCase();
+    const cur = byRetailer.get(key);
+    if (!cur || o.price < cur.price) byRetailer.set(key, o);
+  }
+  return [...byRetailer.values()].sort((a, b) => a.price - b.price);
 }
 
 // --- public API -------------------------------------------------------------

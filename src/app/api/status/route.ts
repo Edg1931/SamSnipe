@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { keepaStatus, KEEPA_KEY_PRESENT, KEEPA_LIVE } from "@/lib/keepa";
 import { aiEnabled, aiModel } from "@/lib/ai";
+import { spApiStatus } from "@/lib/spapi";
 import { retailLive } from "@/lib/retail";
 import { storeBackend, storeConfigured, kvGet, kvSet } from "@/lib/store";
 
@@ -71,6 +72,26 @@ export async function GET() {
     envVars: ["ANTHROPIC_API_KEY", "SAMSNIPE_AI_MODEL"],
     docs: "https://console.anthropic.com/",
   });
+
+  // --- Amazon SP-API (optional but high-value: real fees/Buy Box/gating) ---
+  try {
+    const s = await spApiStatus();
+    integrations.push({
+      id: "spapi",
+      name: "Amazon SP-API — real fees, Buy Box & gating",
+      health: s.ok ? "live" : s.configured ? "error" : "off",
+      required: false,
+      detail: s.reason,
+      envVars: ["SPAPI_CLIENT_ID", "SPAPI_CLIENT_SECRET", "SPAPI_REFRESH_TOKEN", "SPAPI_SELLER_ID"],
+      docs: "https://developer-docs.amazon.com/sp-api/",
+    });
+  } catch {
+    integrations.push({
+      id: "spapi", name: "Amazon SP-API — real fees, Buy Box & gating", health: "off", required: false,
+      detail: "Not configured.", envVars: ["SPAPI_CLIENT_ID", "SPAPI_CLIENT_SECRET", "SPAPI_REFRESH_TOKEN", "SPAPI_SELLER_ID"],
+      docs: "https://developer-docs.amazon.com/sp-api/",
+    });
+  }
 
   // --- Durable store (optional) ---
   const ping = await storePing();

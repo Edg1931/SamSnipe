@@ -148,18 +148,63 @@ export async function getGating(asin: string): Promise<SpGating | null> {
   return { gated: true, reasons, approvalUrl };
 }
 
-/** Resolve a UPC/EAN to an Amazon ASIN + title via the Catalog API. */
-export async function catalogByUpc(upc: string): Promise<{ asin: string; title: string; brand: string } | null> {
+export interface SpCatalogItem { asin: string; title: string; brand: string; category: string; bsr: number }
+
+function parseCatalogItem(item: Json | undefined): SpCatalogItem | null {
+  if (!item) return null;
+  const asin = String(dig(item, "asin") ?? "");
+  if (!asin) return null;
+  const summary = (dig(item, "summaries") as Json[] | undefined)?.[0];
+  const ranks = (dig(item, "salesRanks") as Json[] | undefined)?.[0];
+  const dgr = (dig(ranks, "displayGroupRanks") as Json[] | undefined)?.[0]
+    ?? (dig(ranks, "classificationRanks") as Json[] | undefined)?.[0];
+  return {
+    asin,
+    title: String(dig(summary, "itemName") ?? ""),
+    brand: String(dig(summary, "brand") ?? ""),
+    category: String(dig(dgr, "title") ?? dig(summary, "browseClassification", "displayName") ?? ""),
+    bsr: num(dig(dgr, "rank")),
+  };
+}
+
+/** Resolve a UPC/EAN to an Amazon catalog item (ASIN, title, brand, BSR). */
+export async function catalogByUpc(upc: string): Promise<SpCatalogItem | null> {
   if (!upc) return null;
-  const data = await sp(`/catalog/2022-04-01/items?identifiers=${encodeURIComponent(upc)}&identifiersType=UPC&marketplaceIds=${MARKETPLACE_ID}&includedData=summaries`);
-  const items = dig(data, "items") as Json[] | undefined;
-  const first = items?.[0];
-  if (!first) return null;
-  const asin = String(dig(first, "asin") ?? "");
-  const summary = (dig(first, "summaries") as Json[] | undefined)?.[0];
-  const title = String(dig(summary, "itemName") ?? "");
-  const brand = String(dig(summary, "brand") ?? "");
-  return asin ? { asin, title, brand } : null;
+  const data = await sp(`/catalog/2022-04-01/items?identifiers=${encodeURIComponent(upc)}&identifiersType=UPC&marketplaceIds=${MARKETPLACE_ID}&includedData=summaries,salesRanks`);
+  return parseCatalogItem((dig(data, "items") as Json[] | undefined)?.[0]);
+}
+
+/** Keyword search the Amazon catalog → best-match item (token-free vs Keepa). */
+export async function catalogSearch(keywords: string): Promise<SpCatalogItem | null> {
+  if (!keywords.trim()) return null;
+  const data = await sp(`/catalog/2022-04-01/items?keywords=${encodeURIComponent(keywords)}&marketplaceIds=${MARKETPLACE_ID}&includedData=summaries,salesRanks&pageSize=5`);
+  return parseCatalogItem((dig(data, "items") as Json[] | undefined)?.[0]);
+}
+
+export interface SpResolved { asin: string; title: string; brand: string; category: string; bsr: number; price: number; offerCount: number }
+
+/**
+ * Resolve a discovered product to real Amazon data WITHOUT spending Keepa tokens:
+ * catalog (ASIN + BSR) + Buy Box price. Returns null unless we get a real price,
+ * so callers can fall back to Keepa/estimate. Fees come later (drawer, on-demand).
+ */
+export async function resolveAmazon(q: { upc?: string; title: string; brand?: string }): Promise<SpResolved | null> {
+  if (!spApiEnabled()) return null;
+  let item = q.upc ? await catalogByUpc(q.upc) : null;
+  if (!item) item = await catalogSearch(`${q.brand ?? ""} ${q.title}`.trim());
+  if (!item?.asin) return null;
+  const bb = await getBuyBox(item.asin);
+  const price = bb?.buyBoxPrice ?? null;
+  if (price == null || price <= 0) return null;
+  return {
+    asin: item.asin,
+    title: item.title || q.title,
+    brand: item.brand || q.brand || "",
+    category: item.category || "Home & Kitchen",
+    bsr: item.bsr || 0,
+    price,
+    offerCount: bb?.offerCount ?? 0,
+  };
 }
 
 /** Everything for a deal's drawer in one call (each piece independent). */

@@ -10,6 +10,7 @@
 import { calcProfit } from "./profit";
 import { decideVerdict, swatchFor } from "./verdict";
 import { bestMockOffer } from "./retail";
+import { spApiEnabled, resolveAmazon } from "./spapi";
 import type { Deal, PricePoint, RiskFlag, DiscoveredDeal } from "./types";
 
 const KEEPA_BASE = "https://api.keepa.com";
@@ -227,11 +228,29 @@ export async function searchProducts(term: string): Promise<string[]> {
 }
 
 // Turn AI-web-discovered candidates into analyzed Deals: keep the real retail
-// buy price/URL, and verify the ASIN + pull the Amazon sell-side from Keepa.
+// buy price/URL, and verify the ASIN + Amazon sell-side.
+//
+// Resolution order (cost-aware): SP-API first (free — no Keepa tokens), then
+// Keepa only as a fallback. With a tight Keepa plan (e.g. 1 token/hour), set up
+// SP-API and discovery stops touching Keepa entirely.
 export async function resolveCandidates(cands: DiscoveredDeal[]): Promise<Deal[]> {
   const out: Deal[] = [];
   for (let i = 0; i < cands.length; i++) {
     const c = cands[i];
+
+    // 1) SP-API — token-free real ASIN + Buy Box price + BSR.
+    if (spApiEnabled()) {
+      const r = await resolveAmazon({ upc: c.upc, title: c.title, brand: c.brand });
+      if (r) {
+        out.push(buildFromCandidate(c, {
+          asin: r.asin, title: r.title, brand: r.brand, category: r.category,
+          currentPrice: r.price, currentBsr: r.bsr, offerCount: r.offerCount, weightLb: 1,
+        } as KeepaProduct, i));
+        continue;
+      }
+    }
+
+    // 2) Keepa fallback (spends tokens).
     let asin: string | undefined;
     if (KEEPA_LIVE) {
       if (c.upc) asin = (await findByCode(c.upc))[0];

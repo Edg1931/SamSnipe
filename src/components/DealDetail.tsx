@@ -9,7 +9,7 @@ import { computeSurvival, SURVIVAL_COLOR } from "@/lib/survival";
 import { computeSaturation, SATURATION_COLOR } from "@/lib/saturation";
 import { computeUngating, type Approvals } from "@/lib/ungating";
 import type { RetailOffer } from "@/lib/retail";
-import { resolveSourceUrl, amazonUrl, keepaUrl, amazonSearch, channelUrl } from "@/lib/links";
+import { sourceLink, amazonUrl, keepaUrl, amazonSearch, channelUrl } from "@/lib/links";
 import { useEscape } from "@/lib/hooks";
 import { assessTrust } from "@/lib/trust";
 import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
@@ -100,7 +100,7 @@ export function DealDetail({
     ? (amazonUrl(deal.match.asin) ?? amazonSearch(`${deal.brand} ${deal.title}`))
     : amazonSearch(`${deal.brand} ${deal.title}`);
   const keUrl = verified ? keepaUrl(deal.match.asin) : null;
-  const srcUrl = resolveSourceUrl({ source: deal.source, title: deal.title, sourceUrl: deal.sourceUrl });
+  const srcUrl = sourceLink(deal);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-bg">

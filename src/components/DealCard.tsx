@@ -7,7 +7,7 @@ import { computeSurvival } from "@/lib/survival";
 import { estimateVelocity } from "@/lib/velocity";
 import { assessTrust } from "@/lib/trust";
 import { dealScore, SCORE_COLOR, scoreGrade } from "@/lib/score";
-import { resolveSourceUrl, amazonUrl, keepaUrl, amazonSearch } from "@/lib/links";
+import { sourceLink, amazonUrl, keepaUrl, amazonSearch } from "@/lib/links";
 
 export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void }) {
   const roiColor = deal.roi >= 40 ? "#10d98e" : deal.roi >= 25 ? "#84cc16" : deal.roi >= 15 ? "#f5a524" : "#f4476b";
@@ -25,7 +25,7 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
   ].filter(Boolean) as string[];
   // Entry-quality: is the current Amazon price below its 90-day average?
   const priceTrend = deal.avg90 ? (deal.amazonPrice <= deal.avg90 ? "below" : "above") : null;
-  const srcUrl = resolveSourceUrl({ source: deal.source, title: deal.title, sourceUrl: deal.sourceUrl });
+  const srcUrl = sourceLink(deal);
   // Only deep-link the Amazon/Keepa listing when the ASIN is verified; otherwise
   // search (a fake/unmatched ASIN would 404 or show the wrong product).
   const verified = trust.level === "verified";

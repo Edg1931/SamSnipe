@@ -84,6 +84,24 @@ export function resolveSourceUrl(opts: {
   return sourceSearchUrl(source, title);
 }
 
+/**
+ * Buy-side link with the same "verify or search" rule as the Amazon side:
+ * only deep-link to a specific product listing when the price was pulled from
+ * THAT live listing (costSource === "live"). Otherwise the price is modeled and
+ * the URL may be the wrong item, so we degrade to a retailer search.
+ */
+export function sourceLink(deal: {
+  source: string;
+  title: string;
+  sourceUrl?: string;
+  costSource?: "live" | "estimated" | "import";
+}): string {
+  if (deal.costSource === "live" && deal.sourceUrl && /^https?:\/\//i.test(deal.sourceUrl)) {
+    return deal.sourceUrl;
+  }
+  return sourceSearchUrl(deal.source, deal.title);
+}
+
 /** Home page of a retailer domain — for verifying a source site is what you expect. */
 export function storeHomeUrl(domain: string): string {
   const d = domain.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");

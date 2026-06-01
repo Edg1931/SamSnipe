@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import type { BuyItem, BuyStatus, Defensibility, Invoice, Fulfillment } from "@/lib/buylist";
 import { computeTotals, complianceSummary, defensibilityOf, setInvoice, setFulfillment, setTracking } from "@/lib/buylist";
 import { usd } from "@/lib/format";
-import { resolveSourceUrl, amazonUrl } from "@/lib/links";
+import { sourceLink, amazonUrl, amazonSearch } from "@/lib/links";
+import { assessTrust } from "@/lib/trust";
 import { useEscape } from "@/lib/hooks";
 
 const STATUSES: BuyStatus[] = ["to_buy", "ordered", "received"];
@@ -118,8 +119,11 @@ export function BuyListPanel({
         ) : (
           <div className="mt-4 space-y-2.5">
             {items.map((i) => {
-              const az = amazonUrl(i.deal.match.asin);
-              const src = resolveSourceUrl({ source: i.deal.source, title: i.deal.title, sourceUrl: i.deal.sourceUrl });
+              // Verify-or-search: only deep-link a verified ASIN / live source.
+              const az = assessTrust(i.deal).level === "verified"
+                ? (amazonUrl(i.deal.match.asin) ?? amazonSearch(`${i.deal.brand} ${i.deal.title}`))
+                : amazonSearch(`${i.deal.brand} ${i.deal.title}`);
+              const src = sourceLink(i.deal);
               const def = defensibilityOf(i);
               const dm = DEF_META[def.level];
               return (

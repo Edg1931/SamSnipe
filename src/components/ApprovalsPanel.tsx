@@ -78,7 +78,7 @@ export function ApprovalsPanel({
               placeholder="e.g. Nike"
               className="flex-1 rounded-lg border border-border bg-black/30 px-3 py-2 text-[13px] text-text placeholder:text-text-faint outline-none focus:border-accent/50"
             />
-            <button onClick={addBrand} className="rounded-lg bg-accent px-4 text-[13px] font-semibold text-black hover:opacity-90">Add</button>
+            <button onClick={addBrand} className="rounded-lg bg-primary px-4 text-[13px] font-semibold text-white hover:opacity-90">Add</button>
           </div>
           {approvals.brands.length > 0 && (
             <div className="mt-2.5 flex flex-wrap gap-1.5">

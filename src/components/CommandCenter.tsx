@@ -10,19 +10,15 @@ import { DealGridSkeleton } from "./Skeleton";
 
 // The daily decision surface: stats, Auto-Pilot finds, and today's best buys.
 export function CommandCenter({
-  deals, dataSource, findingsCount, scanning, discovering, loading,
-  onOpenDeal, onSeeAll, onRunScan, onDiscover, onOpenAutoPilot,
+  deals, dataSource, findingsCount, loading,
+  onOpenDeal, onSeeAll, onOpenAutoPilot,
 }: {
   deals: Deal[];
   dataSource: string;
   findingsCount: number;
-  scanning: boolean;
-  discovering: boolean;
   loading: boolean;
   onOpenDeal: (d: Deal) => void;
   onSeeAll: () => void;
-  onRunScan: () => void;
-  onDiscover: () => void;
   onOpenAutoPilot: () => void;
 }) {
   // Show every deal, ranked best-first: Keepa-verified, then BUY-grade, then
@@ -60,14 +56,7 @@ export function CommandCenter({
             {dataSource !== "mock" ? " · live Keepa data" : " · demo data"}
           </p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={onDiscover} disabled={discovering} className="rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2 text-[13px] font-medium text-accent hover:bg-accent/15 disabled:opacity-60">
-            {discovering ? "Searching web…" : "✦ AI Discover"}
-          </button>
-          <button onClick={onRunScan} disabled={scanning} className="rounded-xl bg-accent px-4 py-2 text-[13px] font-semibold text-black hover:opacity-90 disabled:opacity-60">
-            {scanning ? "Scanning…" : "Run Scan"}
-          </button>
-        </div>
+        <p className="text-[11px] text-text-faint">Use <span className="font-medium text-primary">Find deals</span> above to refresh ↑</p>
       </div>
 
       {/* Stats */}

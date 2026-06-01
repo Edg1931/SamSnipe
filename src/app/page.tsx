@@ -6,6 +6,7 @@ import type { Deal, Verdict } from "@/lib/types";
 import { usd } from "@/lib/format";
 import { Sidebar } from "@/components/Sidebar";
 import { BottomNav } from "@/components/BottomNav";
+import { FindDeals } from "@/components/FindDeals";
 import { CommandCenter } from "@/components/CommandCenter";
 import { DealCard } from "@/components/DealCard";
 import { DealTable } from "@/components/DealTable";
@@ -204,6 +205,8 @@ export default function Home() {
     else if (key === "scan") setShowScan(true);
     else if (key === "sources") setShowSources(true);
     else if (key === "approvals") setShowApprovals(true);
+    else if (key === "brands") setShowBrands(true);
+    else if (key === "import") setShowImport(true);
   }
   function runWatch(q: string) {
     setQuery(q);
@@ -295,6 +298,7 @@ export default function Home() {
       load(query, next).then(() => { setScanning(false); toast.success("Scan complete — feed refreshed"); });
     }, 1400);
   }
+  function findBoth() { discover(); runScan(); }
 
   // Imported rows live alongside scanned deals; combined feed is ROI-ranked and
   // de-duplicated (by ASIN, else title+source) so the same product never shows
@@ -387,41 +391,30 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar active={mode === "home" ? "home" : "deals"} onNavigate={navigate} />
+      <Sidebar
+        active={mode === "home" ? "home" : "deals"}
+        onNavigate={navigate}
+        badges={{
+          buylist: buyList.length,
+          autopilot: searches.filter((s) => s.enabled).length,
+          approvals: approvals.brands.length + approvals.categories.length,
+          brands: exemptBrands.length,
+          sources: sites.filter((s) => s.enabled).length + (aiSearch ? 1 : 0),
+        }}
+      />
 
       <main className="min-w-0 flex-1">
         <header className="glass sticky top-0 z-30 border-b border-border px-5 py-3.5">
           <div className="flex items-center gap-2.5">
             <SearchBar value={query} onChange={setQuery} onSubmit={() => load(query, seed)} understood={understood} />
-            <button
-              onClick={discover}
-              disabled={discovering}
-              className="flex shrink-0 items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-[13px] font-medium text-accent transition hover:bg-accent/15 disabled:opacity-60"
-              title="Have AI search the open web for fresh deals"
-            >
-              {discovering ? <Spinner /> : <GlobeIcon />}
-              <span className="hidden sm:inline">{discovering ? "Searching web…" : "AI Discover"}</span>
-            </button>
-            <button
-              onClick={() => setShowCopilot(true)}
-              className="flex shrink-0 items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-[13px] font-medium text-accent transition hover:bg-accent/15"
-              title="Chat with your AI sourcing copilot"
-            >
-              <SparkIcon />
-              <span className="hidden sm:inline">Copilot</span>
-            </button>
-            <button
-              onClick={runScan}
-              disabled={scanning}
-              className="flex shrink-0 items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
-            >
-              {scanning ? <Spinner /> : <Radar />}
-              {scanning ? "Scanning…" : "Run Scan"}
-            </button>
+            <FindDeals
+              scanning={scanning} discovering={discovering} aiOn={aiOn}
+              onScan={runScan} onDiscover={discover} onBoth={findBoth}
+            />
           </div>
 
-          {/* Tool toolbar */}
-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          {/* Tool toolbar — mobile only; desktop uses the sidebar */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 lg:hidden">
             <Tool onClick={() => setShowAutoPilot(true)} icon={<BoltIcon />} label="Auto-Pilot" badge={searches.filter((s) => s.enabled).length || undefined} />
             <Tool onClick={() => setShowSources(true)} icon={<GlobeIcon />} label="Sources" badge={String(sites.filter((s) => s.enabled).length + (aiSearch ? 1 : 0))} />
             <Tool onClick={() => setShowApprovals(true)} icon={<KeyIcon />} label="Approvals" badge={approvals.brands.length + approvals.categories.length || undefined} />
@@ -454,12 +447,8 @@ export default function Home() {
             deals={allDeals}
             dataSource={dataSource}
             findingsCount={findingsCount}
-            scanning={scanning}
-            discovering={discovering}
             onOpenDeal={setSelected}
             onSeeAll={() => setMode("feed")}
-            onRunScan={runScan}
-            onDiscover={discover}
             onOpenAutoPilot={() => navigate("autopilot")}
           />
         ) : (
@@ -781,6 +770,19 @@ export default function Home() {
       )}
 
       <BottomNav mode={mode} findingsCount={findingsCount} onNavigate={navigate} />
+
+      {/* Copilot — floating assistant (kept out of the toolbars) */}
+      {!showCopilot && (
+        <button
+          onClick={() => setShowCopilot(true)}
+          title="Chat with your AI sourcing copilot"
+          aria-label="Open Copilot"
+          className="fixed bottom-20 right-4 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-[13px] font-semibold text-white shadow-2xl transition hover:bg-primary-dim lg:bottom-6 lg:right-6"
+        >
+          <SparkIcon />
+          <span className="hidden sm:inline">Copilot</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -877,14 +879,6 @@ function Empty() {
   );
 }
 
-function Radar() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M19.07 4.93A10 10 0 1112 2v10l6 4" />
-    </svg>
-  );
-}
-
 function GlobeIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
@@ -960,11 +954,3 @@ function ChartIcon() {
   );
 }
 
-function Spinner() {
-  return (
-    <svg className="animate-spin" width="15" height="15" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
-      <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  );
-}

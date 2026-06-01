@@ -73,7 +73,7 @@ export default function SetupPage() {
           </div>
           <button
             onClick={refresh} disabled={loading}
-            className="rounded-xl bg-accent px-4 py-2 text-[13px] font-semibold text-black hover:opacity-90 disabled:opacity-60"
+            className="rounded-xl bg-primary px-4 py-2 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60"
           >
             {loading ? "Checking…" : "Re-check"}
           </button>

@@ -110,7 +110,7 @@ export function AutoPilotPanel({
               <span className={`h-2 w-2 rounded-full ${storeOn ? "bg-accent" : "bg-sky-400"}`} />
               {storeOn ? `On-demand + persistent store · ${backend}` : "On-demand mode"}
             </div>
-            <button onClick={runNow} disabled={running} className="rounded-lg bg-accent px-3 py-1 text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-60">
+            <button onClick={runNow} disabled={running} className="rounded-lg bg-primary px-3 py-1 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
               {running ? "Running…" : "Run now"}
             </button>
           </div>
@@ -163,7 +163,7 @@ export function AutoPilotPanel({
               placeholder="Brief: toys under $20, 50% ROI, BSR < 100k"
               className="flex-1 rounded-lg border border-border bg-black/30 px-3 py-2 text-[13px] text-text placeholder:text-text-faint outline-none focus:border-accent/50"
             />
-            <button onClick={add} className="rounded-lg bg-accent px-4 text-[13px] font-semibold text-black hover:opacity-90">Save</button>
+            <button onClick={add} className="rounded-lg bg-primary px-4 text-[13px] font-semibold text-white hover:opacity-90">Save</button>
           </div>
         </div>
 

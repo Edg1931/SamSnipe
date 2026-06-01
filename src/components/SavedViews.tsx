@@ -52,7 +52,7 @@ export function SavedViews({
             placeholder="Name this view"
             className="w-32 rounded-full border border-border bg-black/30 px-3 py-1 text-[11px] text-text outline-none focus:border-accent/50"
           />
-          <button onClick={commit} className="rounded-full bg-accent px-3 py-1 text-[11px] font-semibold text-black hover:opacity-90">Save</button>
+          <button onClick={commit} className="rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-white hover:opacity-90">Save</button>
         </span>
       ) : (
         <button onClick={() => setAdding(true)} className="rounded-full border border-dashed border-border px-3 py-1 text-[11px] text-text-dim hover:border-accent/40 hover:text-text">+ Save current</button>

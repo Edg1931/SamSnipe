@@ -71,7 +71,7 @@ export function SourcesPanel({
               placeholder="walmart.com  or  a full clearance URL"
               className="flex-1 rounded-lg border border-border bg-black/30 px-3 py-2 text-[13px] text-text placeholder:text-text-faint outline-none focus:border-accent/50"
             />
-            <button onClick={add} className="rounded-lg bg-accent px-4 text-[13px] font-semibold text-black hover:opacity-90">Add</button>
+            <button onClick={add} className="rounded-lg bg-primary px-4 text-[13px] font-semibold text-white hover:opacity-90">Add</button>
           </div>
           <p className="mt-1 text-[10px] text-text-faint">Paste a category/clearance URL to point the crawler straight at it.</p>
         </div>

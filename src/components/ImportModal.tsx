@@ -173,7 +173,7 @@ export function ImportModal({ onImport, onClose }: { onImport: (deals: Deal[]) =
               <button
                 onClick={() => { onImport(result.deals); onClose(); }}
                 disabled={result.deals.length === 0}
-                className="flex-1 rounded-xl bg-accent py-2.5 text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-50"
+                className="flex-1 rounded-xl bg-primary py-2.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
                 Add {result.deals.length} to feed
               </button>

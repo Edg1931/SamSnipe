@@ -55,7 +55,7 @@ export function BrandsPanel({
           />
           <div className="mt-1.5 flex items-center justify-between">
             <span className="text-[10px] text-text-faint">⌘/Ctrl+Enter to add</span>
-            <button onClick={add} className="rounded-lg bg-accent px-4 py-1.5 text-[12px] font-semibold text-black hover:opacity-90">Add brands</button>
+            <button onClick={add} className="rounded-lg bg-primary px-4 py-1.5 text-[12px] font-semibold text-white hover:opacity-90">Add brands</button>
           </div>
         </div>
 

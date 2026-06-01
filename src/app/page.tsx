@@ -7,6 +7,7 @@ import { usd } from "@/lib/format";
 import { Sidebar } from "@/components/Sidebar";
 import { BottomNav } from "@/components/BottomNav";
 import { FindDeals } from "@/components/FindDeals";
+import { ScanBarcode } from "@/components/ScanBarcode";
 import { CommandCenter } from "@/components/CommandCenter";
 import { DealCard } from "@/components/DealCard";
 import { DealTable } from "@/components/DealTable";
@@ -105,6 +106,7 @@ export default function Home() {
   const [showScan, setShowScan] = useState(false);
   const [searches, setSearches] = useState<SavedSearch[]>([]);
   const [showAutoPilot, setShowAutoPilot] = useState(false);
+  const [showBarcode, setShowBarcode] = useState(false);
 
   async function load(q: string, s: number, opts?: { sites?: TargetSite[]; ai?: boolean }) {
     setLoading(true);
@@ -193,7 +195,7 @@ export default function Home() {
   function navigate(key: string) {
     setShowSources(false); setShowBrands(false); setShowImport(false);
     setShowBuyList(false); setShowCopilot(false); setShowApprovals(false);
-    setShowOptimizer(false); setShowScan(false); setShowAutoPilot(false);
+    setShowOptimizer(false); setShowScan(false); setShowAutoPilot(false); setShowBarcode(false);
     setSelected(null);
     if (key === "setup") { router.push("/setup"); return; }
     if (key === "home") setMode("home");
@@ -203,6 +205,7 @@ export default function Home() {
     else if (key === "buylist") setShowBuyList(true);
     else if (key === "copilot") setShowCopilot(true);
     else if (key === "scan") setShowScan(true);
+    else if (key === "barcode") setShowBarcode(true);
     else if (key === "sources") setShowSources(true);
     else if (key === "approvals") setShowApprovals(true);
     else if (key === "brands") setShowBrands(true);
@@ -426,6 +429,7 @@ export default function Home() {
             <Tool onClick={() => setShowBrands(true)} icon={<TagIcon />} label="Exempt" badge={exemptBrands.length || undefined} danger />
             <Tool onClick={() => setShowImport(true)} icon={<UploadIcon />} label="Import / Manifest" />
             <Tool onClick={() => setShowScan(true)} icon={<CameraIcon />} label="Shelf Scan" />
+            <Tool onClick={() => setShowBarcode(true)} icon={<BarcodeIcon />} label="Scan Barcode" />
             <Tool onClick={() => setShowOptimizer(true)} icon={<ChartIcon />} label="Optimizer" />
             <Tool onClick={() => setShowBuyList(true)} icon={<CartIcon />} label="Buy List" badge={buyList.length || undefined} />
           </div>
@@ -762,6 +766,7 @@ export default function Home() {
       )}
 
       {showScan && <ScanModal aiOn={aiOn} onClose={() => setShowScan(false)} />}
+      {showBarcode && <ScanBarcode onClose={() => setShowBarcode(false)} onResult={(d) => { setShowBarcode(false); setSelected(d); }} />}
 
       {showAutoPilot && (
         <AutoPilotPanel
@@ -881,6 +886,14 @@ function Empty() {
       <p className="mt-2 text-sm font-medium text-text">No deals match that brief</p>
       <p className="text-[12px] text-text-dim">Loosen your ROI/BSR criteria or run a fresh scan.</p>
     </div>
+  );
+}
+
+function BarcodeIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <path d="M3 5v14M7 5v14M11 5v14M14 5v14M18 5v14M21 5v14" />
+    </svg>
   );
 }
 

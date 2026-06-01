@@ -8,7 +8,6 @@ import { estimateVelocity } from "@/lib/velocity";
 import { computeSurvival, SURVIVAL_COLOR } from "@/lib/survival";
 import { computeSaturation, SATURATION_COLOR } from "@/lib/saturation";
 import { computeUngating, type Approvals } from "@/lib/ungating";
-import { channelOptions } from "@/lib/channels";
 import type { RetailOffer } from "@/lib/retail";
 import { resolveSourceUrl, amazonUrl, keepaUrl, amazonSearch, channelUrl } from "@/lib/links";
 import { useEscape } from "@/lib/hooks";
@@ -49,13 +48,6 @@ export function DealDetail({
   const survival = computeSurvival(deal);
   const saturation = computeSaturation(deal);
   const ungating = computeUngating(deal, approvals);
-  const channels = channelOptions(deal);
-  // You resell on Amazon, so pin it as the primary channel; the rest stay listed
-  // (ranked by profit) as alternatives worth knowing about.
-  const amazonCh = channels.find((c) => c.channel === "Amazon") ?? channels[0];
-  const otherCh = channels.filter((c) => c.channel !== amazonCh.channel);
-  const orderedChannels = [amazonCh, ...otherCh];
-  const topAlt = otherCh[0];
 
   const [ai, setAi] = useState<AIVerdict | null>(null);
   const [aiLoading, setAiLoading] = useState(true);
@@ -100,10 +92,15 @@ export function DealDetail({
     return () => { live = false; clearTimeout(id); };
   }, [deal]);
 
-  const azUrl = amazonUrl(deal.match.asin) ?? amazonSearch(`${deal.brand} ${deal.title}`);
-  const keUrl = keepaUrl(deal.match.asin);
-  const srcUrl = resolveSourceUrl({ source: deal.source, title: deal.title, sourceUrl: deal.sourceUrl });
   const trust = assessTrust(deal);
+  const verified = trust.level === "verified";
+  // Only deep-link to a specific Amazon/Keepa listing when the ASIN is
+  // Keepa-verified; otherwise /dp/ could 404 or be the wrong product, so search.
+  const azUrl = verified
+    ? (amazonUrl(deal.match.asin) ?? amazonSearch(`${deal.brand} ${deal.title}`))
+    : amazonSearch(`${deal.brand} ${deal.title}`);
+  const keUrl = verified ? keepaUrl(deal.match.asin) : null;
+  const srcUrl = resolveSourceUrl({ source: deal.source, title: deal.title, sourceUrl: deal.sourceUrl });
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-bg">
@@ -376,46 +373,50 @@ export function DealDetail({
           </div>
         </div>
 
-        {/* Multi-channel exits */}
+        {/* Amazon resale — anchored to the real Keepa price + the actual listing.
+            We never quote a price we can't link to a real listing. */}
         <div className="mb-4 break-inside-avoid rounded-xl border border-border bg-black/20 p-3">
           <div className="mb-2 flex items-center justify-between text-[11px]">
-            <span className="font-semibold uppercase tracking-wide text-text-dim">Resale channel</span>
-            <span className="text-text-dim">primary: <span className="font-semibold text-accent">Amazon</span></span>
+            <span className="font-semibold uppercase tracking-wide text-text-dim">Amazon resale</span>
+            {verified ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                <span className="h-1 w-1 rounded-full bg-accent" /> live · Keepa
+              </span>
+            ) : (
+              <span className="rounded-md bg-warn/15 px-1.5 py-0.5 text-[10px] font-medium text-warn">unverified</span>
+            )}
           </div>
-          <div className="space-y-1">
-            {orderedChannels.map((ch, i) => {
-              const primary = i === 0;
-              return (
-                <div
-                  key={ch.channel}
-                  className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${primary ? "bg-accent/10 ring-1 ring-accent/30" : "bg-black/20"}`}
-                >
-                  <span className={`flex items-center gap-1.5 ${primary ? "font-semibold text-text" : "text-text-dim"}`}>
-                    {ch.channel}
-                    {primary && <span className="rounded bg-accent/20 px-1 text-[9px] font-medium text-accent">primary</span>}
-                  </span>
-                  <span className="flex items-center gap-3">
-                    <span className="text-text-dim">{usd(ch.estPrice)}</span>
-                    <span className="font-mono" style={{ color: ch.netProfit > 0 ? "#10d98e" : "#f4476b" }}>{usd(ch.netProfit)}</span>
-                    <span className="w-12 text-right font-mono text-text-dim">{ch.roi}%</span>
-                    <a
-                      href={channelUrl(ch.channel, { asin: deal.match.asin, title: deal.title, brand: deal.brand })}
-                      target="_blank" rel="noopener noreferrer"
-                      className="text-accent"
-                      title={ch.channel === "eBay" ? `Verify on ${ch.channel} (sold comps)` : `Verify price on ${ch.channel}`}
-                    >↗</a>
-                  </span>
-                </div>
-              );
-            })}
+
+          <div className="space-y-1.5 rounded-lg bg-accent/10 p-2.5 text-[12px]">
+            <Row label="Sell price (Amazon)" value={usd(deal.amazonPrice)} strong />
+            <Row label="Net profit / unit" value={usd(deal.profit)} strong color={deal.profit > 0 ? "#10d98e" : "#f4476b"} />
+            <Row label="ROI" value={`${deal.roi}%`} color={deal.roi >= 30 ? "#10d98e" : "#f5a524"} />
           </div>
-          <p className="mt-2 text-[11px] leading-snug text-text-dim">{amazonCh.note}</p>
-          {topAlt && topAlt.netProfit > amazonCh.netProfit && (
-            <p className="mt-1 text-[11px] leading-snug text-text-dim">
-              💡 {topAlt.channel} would net more here ({usd(topAlt.netProfit)} vs {usd(amazonCh.netProfit)} on Amazon) if you ever branch out.
+
+          <a
+            href={azUrl} target="_blank" rel="noopener noreferrer"
+            className="mt-2 block rounded-lg bg-primary py-2 text-center text-[12px] font-semibold text-white transition hover:opacity-90"
+          >
+            {verified ? "View live Amazon listing ↗" : "Find this item on Amazon ↗"}
+          </a>
+          <p className="mt-1 text-[10px] leading-snug text-text-faint">
+            {verified
+              ? "Price is the live Keepa Amazon price — the link opens the actual listing so you can confirm it."
+              : "Price is unverified — connect Keepa for the live Amazon price. The link runs an Amazon search so you can find the real listing."}
+          </p>
+
+          {/* Other channels: links to REAL listings only — no invented prices. */}
+          <div className="mt-3 border-t border-border-soft pt-2">
+            <div className="mb-1.5 text-[10px] uppercase tracking-wide text-text-faint">Compare real comps</div>
+            <div className="flex flex-wrap gap-1.5">
+              <CompLink href={channelUrl("eBay", { asin: deal.match.asin, title: deal.title, brand: deal.brand })} label="eBay sold ↗" />
+              <CompLink href={channelUrl("Walmart", { title: deal.title, brand: deal.brand })} label="Walmart ↗" />
+              <CompLink href={channelUrl("Mercari", { title: deal.title, brand: deal.brand })} label="Mercari ↗" />
+            </div>
+            <p className="mt-1 text-[10px] leading-snug text-text-faint">
+              We don&apos;t quote prices we can&apos;t verify — open a marketplace to read real sold / for-sale listings.
             </p>
-          )}
-          <p className="mt-1 text-[10px] text-text-faint">↗ opens that marketplace to verify the sell price — eBay shows sold/completed listings (real comps).</p>
+          </div>
         </div>
 
         {/* Risks */}
@@ -461,6 +462,14 @@ export function DealDetail({
         </div>
       </div>
     </div>
+  );
+}
+
+function CompLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-border bg-white/5 px-2.5 py-1 text-[11px] text-text-dim transition hover:border-primary/40 hover:text-text">
+      {label}
+    </a>
   );
 }
 

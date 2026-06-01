@@ -26,8 +26,11 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
   // Entry-quality: is the current Amazon price below its 90-day average?
   const priceTrend = deal.avg90 ? (deal.amazonPrice <= deal.avg90 ? "below" : "above") : null;
   const srcUrl = resolveSourceUrl({ source: deal.source, title: deal.title, sourceUrl: deal.sourceUrl });
-  const azUrl = amazonUrl(deal.match.asin) ?? amazonSearch(`${deal.brand} ${deal.title}`);
-  const keUrl = keepaUrl(deal.match.asin);
+  // Only deep-link the Amazon/Keepa listing when the ASIN is verified; otherwise
+  // search (a fake/unmatched ASIN would 404 or show the wrong product).
+  const verified = trust.level === "verified";
+  const azUrl = verified ? (amazonUrl(deal.match.asin) ?? amazonSearch(`${deal.brand} ${deal.title}`)) : amazonSearch(`${deal.brand} ${deal.title}`);
+  const keUrl = verified ? keepaUrl(deal.match.asin) : null;
   const stop = (e: MouseEvent) => e.stopPropagation();
   return (
     <div

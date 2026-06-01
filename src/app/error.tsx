@@ -13,7 +13,7 @@ export default function Error({ reset }: { error: Error; reset: () => void }) {
         </p>
         <button
           onClick={reset}
-          className="mt-4 rounded-xl bg-accent px-5 py-2.5 text-[13px] font-semibold text-black hover:opacity-90"
+          className="mt-4 rounded-xl bg-primary px-5 py-2.5 text-[13px] font-semibold text-white hover:opacity-90"
         >
           Reload
         </button>

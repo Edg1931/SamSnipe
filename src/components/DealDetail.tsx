@@ -132,7 +132,7 @@ export function DealDetail({
         </div>
         <div className="hidden items-center gap-2 sm:flex">
           <button onClick={() => onPass(deal)} className="rounded-xl border border-border bg-white/5 px-4 py-2 text-[12px] font-medium text-text-dim hover:bg-white/10">Pass</button>
-          <button onClick={() => onAddToBuyList(deal)} disabled={inBuyList} className="rounded-xl bg-accent px-4 py-2 text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-50">{inBuyList ? "✓ In buy list" : "Add to buy list"}</button>
+          <button onClick={() => onAddToBuyList(deal)} disabled={inBuyList} className="rounded-xl bg-primary px-4 py-2 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50">{inBuyList ? "✓ In buy list" : "Add to buy list"}</button>
         </div>
         <VerdictBadge verdict={deal.verdict} />
       </header>
@@ -453,7 +453,7 @@ export function DealDetail({
             <button onClick={() => onPass(deal)} className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text-dim hover:bg-white/10">
               Pass
             </button>
-            <button onClick={() => onAddToBuyList(deal)} disabled={inBuyList} className="rounded-xl bg-accent py-2.5 text-center text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-50">
+            <button onClick={() => onAddToBuyList(deal)} disabled={inBuyList} className="rounded-xl bg-primary py-2.5 text-center text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
               {inBuyList ? "✓ In buy list" : "Add to buy list"}
             </button>
           </div>

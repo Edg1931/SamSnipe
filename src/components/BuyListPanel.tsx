@@ -308,7 +308,7 @@ function InvoiceEditor({
         )}
         <button
           onClick={() => onSave({ fileName, dataUrl, supplier, purchaseDate, units, amount, addedAt: new Date().toISOString() })}
-          className="ml-auto rounded-lg bg-accent px-4 py-1.5 text-[11px] font-semibold text-black hover:opacity-90"
+          className="ml-auto rounded-lg bg-primary px-4 py-1.5 text-[11px] font-semibold text-white hover:opacity-90"
         >
           Save invoice
         </button>

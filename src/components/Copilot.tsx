@@ -76,7 +76,7 @@ export function Copilot({
             <div key={i} className={`flex ${t.role === "user" ? "justify-end" : "justify-start"}`}>
               <div
                 className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-[12px] leading-relaxed ${
-                  t.role === "user" ? "bg-accent text-black" : "border border-border bg-black/20 text-text"
+                  t.role === "user" ? "bg-primary text-white" : "border border-border bg-black/20 text-text"
                 }`}
               >
                 {t.content}
@@ -112,7 +112,7 @@ export function Copilot({
               placeholder="Ask your copilot…"
               className="w-full bg-transparent text-[13px] text-text placeholder:text-text-faint outline-none"
             />
-            <button onClick={send} disabled={busy || !input.trim()} className="rounded-lg bg-accent px-3 py-1 text-[12px] font-semibold text-black disabled:opacity-50">Send</button>
+            <button onClick={send} disabled={busy || !input.trim()} className="rounded-lg bg-primary px-3 py-1 text-[12px] font-semibold text-white disabled:opacity-50">Send</button>
           </div>
         </div>
       </aside>

@@ -91,7 +91,7 @@ export function OptimizerModal({
         {result.picks.length > 0 && (
           <button
             onClick={() => { onAddBasket(result.picks.map((p) => ({ deal: p.deal, qty: p.qty }))); onClose(); }}
-            className="mt-4 rounded-xl bg-accent py-2.5 text-center text-[13px] font-semibold text-black hover:opacity-90"
+            className="mt-4 rounded-xl bg-primary py-2.5 text-center text-[13px] font-semibold text-white hover:opacity-90"
           >
             Add this basket to buy list
           </button>

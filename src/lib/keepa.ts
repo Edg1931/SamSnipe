@@ -26,6 +26,9 @@ const BESTSELLER_CATS = [165793011, 172282, 1055398, 3375251, 3760901, 3760911];
 // plan with a healthy refill rate (SAMSNIPE_DEAL_LIMIT).
 const DEAL_LIMIT = Math.max(1, Math.min(150, Number(process.env.SAMSNIPE_DEAL_LIMIT || "12")));
 const COST_RATIO = Number(process.env.SAMSNIPE_COST_RATIO || "0.6");
+// ASINs per /product call. Smaller = lighter individual requests, friendlier to
+// a slow token-refill plan. Default 50; lower it (e.g. 20) on the entry plan.
+const KEEPA_BATCH = Math.max(1, Math.min(100, Number(process.env.SAMSNIPE_KEEPA_BATCH || "50")));
 
 // --- Keepa encoding helpers -------------------------------------------------
 const KEEPA_EPOCH_MIN = 21564000;
@@ -175,23 +178,26 @@ async function keepaFetch(path: string, attempt = 0): Promise<unknown | null> {
   }
 }
 
-/** Fetch full product detail for many ASINs, batched 100 per Keepa call. */
+/** Fetch full product detail for many ASINs, batched per Keepa call. */
 export async function getProducts(asins: string[]): Promise<KeepaProduct[]> {
   if (!KEEPA_LIVE || asins.length === 0) return [];
   const out: KeepaProduct[] = [];
-  for (let i = 0; i < asins.length; i += 100) {
+  for (let i = 0; i < asins.length; i += KEEPA_BATCH) {
     if (i > 0) await sleep(300); // space out batches so we don't burst the rate limit
-    const batch = asins.slice(i, i + 100).join(",");
+    const batch = asins.slice(i, i + KEEPA_BATCH).join(",");
     // Token-frugal: stats + history only. We deliberately skip the expensive
     // `offers` and `buybox` params (each costs several Keepa tokens per ASIN);
     // current price falls back to NEW, offer count to the basic field.
     const data = (await keepaFetch(
       `/product?key=${KEY}&domain=1&asin=${batch}&stats=1&history=1`
-    )) as { products?: KeepaProductRaw[] } | null;
+    )) as { products?: KeepaProductRaw[]; tokensLeft?: number } | null;
     for (const raw of data?.products ?? []) {
       const mapped = mapProduct(raw);
       if (mapped) out.push(mapped);
     }
+    // Token-aware: stop early when the bucket can't cover another batch, so we
+    // return what we have instead of triggering a wall of 429s on a slow plan.
+    if (typeof data?.tokensLeft === "number" && data.tokensLeft < KEEPA_BATCH) break;
   }
   return out;
 }

@@ -15,6 +15,8 @@ import { dealScore } from "@/lib/score";
 import { assessTrust } from "@/lib/trust";
 import { toast } from "@/lib/toast";
 import { DealGridSkeleton } from "@/components/Skeleton";
+import { SavedViews } from "@/components/SavedViews";
+import { loadViews, saveViews, viewMatches, type SavedView } from "@/lib/views";
 import { SourcesPanel } from "@/components/SourcesPanel";
 import { ImportModal } from "@/components/ImportModal";
 import { BrandsPanel } from "@/components/BrandsPanel";
@@ -67,6 +69,7 @@ export default function Home() {
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [findingsCount, setFindingsCount] = useState(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [views, setViews] = useState<SavedView[]>([]);
   const [crit, setCrit] = useState({ minRoi: 0, maxBsr: 0, maxCost: 0, minSurvival: 0, minSold: 0, category: "" });
 
   // Targeted sources + AI web search + spreadsheet imports.
@@ -133,7 +136,9 @@ export default function Home() {
     const ap = loadApprovals();
     const dec = loadDecisions();
     const sx = loadSearches();
+    const vw = loadViews();
     const id = setTimeout(() => {
+      setViews(vw);
       setSites(s);
       setAiSearch(ai);
       setExemptBrands(eb);
@@ -159,6 +164,27 @@ export default function Home() {
   function updateSearches(s: SavedSearch[]) {
     setSearches(s);
     saveSearches(s);
+  }
+
+  // Saved views — snapshot/restore the feed's filter + sort lens.
+  const viewSnapshot = () => ({ filter, sortMode, verifiedOnly, crit });
+  function applyView(v: SavedView) {
+    setFilter(v.filter as Filter);
+    setSortMode(v.sortMode as "score" | "roi" | "foryou");
+    setVerifiedOnly(v.verifiedOnly);
+    setCrit(v.crit);
+    setShown(PAGE);
+    toast.info(`View “${v.name}” applied`);
+  }
+  function saveView(name: string) {
+    const v: SavedView = { id: Date.now().toString(36), name, ...viewSnapshot() };
+    const next = [...views.filter((x) => x.name !== name), v];
+    setViews(next); saveViews(next);
+    toast.success(`Saved view “${name}”`);
+  }
+  function deleteView(id: string) {
+    const next = views.filter((v) => v.id !== id);
+    setViews(next); saveViews(next);
   }
   // Single entry point for sidebar + bottom nav — close everything, then route.
   function navigate(key: string) {
@@ -573,6 +599,14 @@ export default function Home() {
               </button>
             ))}
           </div>
+
+          <SavedViews
+            views={views}
+            isActive={(v) => viewMatches(v, viewSnapshot())}
+            onApply={applyView}
+            onSave={saveView}
+            onDelete={deleteView}
+          />
 
           {/* Filter rail */}
           {showFilters && (

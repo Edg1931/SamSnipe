@@ -11,7 +11,7 @@ interface Integration {
 interface Status {
   generatedAt: string;
   summary: { live: number; total: number; coreReady: boolean };
-  config: { keepaLive: boolean; dealLimit: number; minSafety: number; cronSecret: boolean; aiModel: string };
+  config: { keepaLive: boolean; dealLimit: number; keepaBatch: number; minSafety: number; cronSecret: boolean; aiModel: string };
   integrations: Integration[];
 }
 
@@ -119,6 +119,7 @@ export default function SetupPage() {
             <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12px] sm:grid-cols-3">
               <Cfg k="Keepa live" v={status.config.keepaLive ? "on" : "off"} />
               <Cfg k="Deals / fetch" v={String(status.config.dealLimit)} />
+              <Cfg k="Keepa batch" v={String(status.config.keepaBatch)} />
               <Cfg k="Min safety score" v={String(status.config.minSafety)} />
               <Cfg k="Cron secret" v={status.config.cronSecret ? "set" : "not set"} />
               <Cfg k="AI model" v={status.config.aiModel} />

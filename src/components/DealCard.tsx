@@ -76,7 +76,7 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
       </div>
 
       <div className="mt-3 grid grid-cols-4 gap-2 rounded-xl bg-black/20 p-2.5">
-        <Stat label="Cost" value={usd(deal.sourcePrice)} sub={deal.source} />
+        <Stat label="Cost" value={usd(deal.sourcePrice)} sub={deal.costSource === "live" ? `${deal.source} · live` : deal.source} />
         <Stat label="Sells" value={usd(deal.amazonPrice)} sub="Amazon" />
         <Stat label="Profit" value={usd(deal.profit)} sub={`${deal.margin}% margin`} accent="#e8edf4" />
         <Stat label="ROI" value={`${deal.roi}%`} sub={`${usd(deal.fbaFees)} fees`} accent={roiColor} />

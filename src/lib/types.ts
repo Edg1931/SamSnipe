@@ -74,6 +74,8 @@ export interface Deal {
   fbaFees: number;
   /** Whether the fee figures are Amazon-accurate (Keepa) or our estimate. */
   feesSource?: "keepa" | "estimated";
+  /** Where the buy/source price came from: a live retailer listing, your import, or our estimate. */
+  costSource?: "live" | "estimated" | "import";
 
   verdict: Verdict;
   /** AI-written one-liner explaining the verdict. */

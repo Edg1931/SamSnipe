@@ -14,6 +14,7 @@
 // lookup via /api/retail).
 
 import { sourceSearchUrl } from "./links";
+import type { Deal } from "./types";
 
 export type Retailer =
   | "Walmart" | "Target" | "Home Depot" | "Best Buy" | "Kohl's" | "eBay" | "Costco";
@@ -200,4 +201,44 @@ export async function getRetailOffers(q: RetailQuery): Promise<{ offers: RetailO
 export function bestMockOffer(q: RetailQuery): RetailOffer | null {
   const inStock = mockOffers(q).filter((o) => o.inStock);
   return inStock[0] ?? null;
+}
+
+/** One lightweight live lookup (Google Shopping only = 1 SerpApi call). */
+export async function bestLiveOffer(q: RetailQuery): Promise<RetailOffer | null> {
+  if (!retailLive()) return null;
+  const offers = await googleShoppingOffers(q);
+  if (offers.length === 0) return null;
+  return [...offers].sort((a, b) => a.price - b.price)[0];
+}
+
+/**
+ * Replace the modeled cost with a REAL retailer price for the most promising
+ * deals, so the headline ROI reflects what you can actually buy it for. Capped
+ * to `limit` lookups (one SerpApi call each) to keep cost/latency sane; only
+ * runs when SerpApi is live. Untouched deals keep their estimate.
+ */
+export async function applyLiveCosts(deals: Deal[], limit: number): Promise<Deal[]> {
+  if (!retailLive() || deals.length === 0 || limit <= 0) return deals;
+  // Spend lookups on the highest-ROI deals first.
+  const targets = [...deals].sort((a, b) => b.roi - a.roi).slice(0, limit);
+  const updates = new Map<string, Deal>();
+  await Promise.all(
+    targets.map(async (d) => {
+      try {
+        const best = await bestLiveOffer({ title: d.title, brand: d.brand, asin: d.match.asin, reference: d.amazonPrice });
+        if (!best || best.price <= 0) return;
+        const cost = best.price;
+        const profit = +(d.amazonPrice - cost - d.fbaFees).toFixed(2);
+        const roi = cost > 0 ? +((profit / cost) * 100).toFixed(1) : 0;
+        const margin = d.amazonPrice > 0 ? +((profit / d.amazonPrice) * 100).toFixed(1) : 0;
+        updates.set(d.id, {
+          ...d, sourcePrice: cost, source: best.retailer, sourceUrl: best.url,
+          profit, roi, margin, costSource: "live",
+        });
+      } catch {
+        /* keep the original estimate on any failure */
+      }
+    })
+  );
+  return updates.size ? deals.map((d) => updates.get(d.id) ?? d) : deals;
 }

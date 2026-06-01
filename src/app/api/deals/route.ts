@@ -3,7 +3,11 @@ import { generateDeals } from "@/lib/mockData";
 import { applyQuery } from "@/lib/search";
 import { parseBrief, aiEnabled } from "@/lib/ai";
 import { KEEPA_LIVE, KEEPA_KEY_PRESENT, liveDeals } from "@/lib/keepa";
+import { applyLiveCosts, retailLive } from "@/lib/retail";
 import type { Deal } from "@/lib/types";
+
+// How many top deals get a real live retailer-price lookup per feed load.
+const RETAIL_LOOKUPS = Math.max(0, Math.min(40, Number(process.env.SAMSNIPE_RETAIL_LOOKUPS || "10")));
 
 // GET /api/deals?q=...&seed=...&sites=walmart.com,target.com&ai=1
 // Live Keepa data when configured (with mock fallback); AI parses the brief.
@@ -32,6 +36,10 @@ export async function GET(req: Request) {
   const parsed = await parseBrief(q);
   if (q.trim()) deals = applyQuery(deals, parsed);
 
+  // Rewrite the top deals' cost/ROI with real retailer prices (SerpApi) so the
+  // headline numbers reflect what you can actually buy it for.
+  deals = await applyLiveCosts(deals, RETAIL_LOOKUPS);
+
   return NextResponse.json({
     deals,
     parsed,
@@ -39,5 +47,6 @@ export async function GET(req: Request) {
     ai: aiEnabled(),
     keepaKey: KEEPA_KEY_PRESENT,
     keepaLive: KEEPA_LIVE,
+    retailLive: retailLive(),
   });
 }

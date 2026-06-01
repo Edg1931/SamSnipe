@@ -50,7 +50,12 @@ export function DealDetail({
   const saturation = computeSaturation(deal);
   const ungating = computeUngating(deal, approvals);
   const channels = channelOptions(deal);
-  const best = channels[0];
+  // You resell on Amazon, so pin it as the primary channel; the rest stay listed
+  // (ranked by profit) as alternatives worth knowing about.
+  const amazonCh = channels.find((c) => c.channel === "Amazon") ?? channels[0];
+  const otherCh = channels.filter((c) => c.channel !== amazonCh.channel);
+  const orderedChannels = [amazonCh, ...otherCh];
+  const topAlt = otherCh[0];
 
   const [ai, setAi] = useState<AIVerdict | null>(null);
   const [aiLoading, setAiLoading] = useState(true);
@@ -374,31 +379,42 @@ export function DealDetail({
         {/* Multi-channel exits */}
         <div className="mb-4 break-inside-avoid rounded-xl border border-border bg-black/20 p-3">
           <div className="mb-2 flex items-center justify-between text-[11px]">
-            <span className="font-semibold uppercase tracking-wide text-text-dim">Best exit channel</span>
-            <span className="text-text-dim">winner: <span className="font-semibold text-accent">{best.channel}</span></span>
+            <span className="font-semibold uppercase tracking-wide text-text-dim">Resale channel</span>
+            <span className="text-text-dim">primary: <span className="font-semibold text-accent">Amazon</span></span>
           </div>
           <div className="space-y-1">
-            {channels.map((ch, i) => (
-              <div
-                key={ch.channel}
-                className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${i === 0 ? "bg-accent/10" : "bg-black/20"}`}
-              >
-                <span className={i === 0 ? "font-semibold text-text" : "text-text-dim"}>{ch.channel}</span>
-                <span className="flex items-center gap-3">
-                  <span className="text-text-dim">{usd(ch.estPrice)}</span>
-                  <span className="font-mono" style={{ color: ch.netProfit > 0 ? "#10d98e" : "#f4476b" }}>{usd(ch.netProfit)}</span>
-                  <span className="w-12 text-right font-mono text-text-dim">{ch.roi}%</span>
-                  <a
-                    href={channelUrl(ch.channel, { asin: deal.match.asin, title: deal.title, brand: deal.brand })}
-                    target="_blank" rel="noopener noreferrer"
-                    className="text-accent"
-                    title={ch.channel === "eBay" ? `Verify on ${ch.channel} (sold comps)` : `Verify price on ${ch.channel}`}
-                  >↗</a>
-                </span>
-              </div>
-            ))}
+            {orderedChannels.map((ch, i) => {
+              const primary = i === 0;
+              return (
+                <div
+                  key={ch.channel}
+                  className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${primary ? "bg-accent/10 ring-1 ring-accent/30" : "bg-black/20"}`}
+                >
+                  <span className={`flex items-center gap-1.5 ${primary ? "font-semibold text-text" : "text-text-dim"}`}>
+                    {ch.channel}
+                    {primary && <span className="rounded bg-accent/20 px-1 text-[9px] font-medium text-accent">primary</span>}
+                  </span>
+                  <span className="flex items-center gap-3">
+                    <span className="text-text-dim">{usd(ch.estPrice)}</span>
+                    <span className="font-mono" style={{ color: ch.netProfit > 0 ? "#10d98e" : "#f4476b" }}>{usd(ch.netProfit)}</span>
+                    <span className="w-12 text-right font-mono text-text-dim">{ch.roi}%</span>
+                    <a
+                      href={channelUrl(ch.channel, { asin: deal.match.asin, title: deal.title, brand: deal.brand })}
+                      target="_blank" rel="noopener noreferrer"
+                      className="text-accent"
+                      title={ch.channel === "eBay" ? `Verify on ${ch.channel} (sold comps)` : `Verify price on ${ch.channel}`}
+                    >↗</a>
+                  </span>
+                </div>
+              );
+            })}
           </div>
-          <p className="mt-2 text-[11px] leading-snug text-text-dim">{best.note}</p>
+          <p className="mt-2 text-[11px] leading-snug text-text-dim">{amazonCh.note}</p>
+          {topAlt && topAlt.netProfit > amazonCh.netProfit && (
+            <p className="mt-1 text-[11px] leading-snug text-text-dim">
+              💡 {topAlt.channel} would net more here ({usd(topAlt.netProfit)} vs {usd(amazonCh.netProfit)} on Amazon) if you ever branch out.
+            </p>
+          )}
           <p className="mt-1 text-[10px] text-text-faint">↗ opens that marketplace to verify the sell price — eBay shows sold/completed listings (real comps).</p>
         </div>
 

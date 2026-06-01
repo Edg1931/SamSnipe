@@ -150,13 +150,27 @@ function mapProduct(p: KeepaProductRaw): KeepaProduct | null {
   };
 }
 
-async function keepaFetch(path: string): Promise<unknown | null> {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Keepa charges tokens per request and returns 429 when the bucket is empty or
+// you're hitting it too fast (common on the entry plan, ~1 req/min). Retry a few
+// times with exponential backoff (honoring Retry-After) so live data still flows
+// instead of silently dropping. Total wait is capped to stay within function time.
+async function keepaFetch(path: string, attempt = 0): Promise<unknown | null> {
   if (!KEY) return null;
   try {
     const res = await fetch(`${KEEPA_BASE}${path}`, { next: { revalidate: 300 } });
+    if (res.status === 429 || res.status === 503) {
+      if (attempt >= 3) return null;
+      const retryAfter = Number(res.headers.get("retry-after"));
+      const wait = retryAfter > 0 ? Math.min(retryAfter * 1000, 8000) : Math.min(1000 * 2 ** attempt, 8000);
+      await sleep(wait);
+      return keepaFetch(path, attempt + 1);
+    }
     if (!res.ok) return null;
     return await res.json();
   } catch {
+    if (attempt < 2) { await sleep(500 * (attempt + 1)); return keepaFetch(path, attempt + 1); }
     return null;
   }
 }
@@ -166,6 +180,7 @@ export async function getProducts(asins: string[]): Promise<KeepaProduct[]> {
   if (!KEEPA_LIVE || asins.length === 0) return [];
   const out: KeepaProduct[] = [];
   for (let i = 0; i < asins.length; i += 100) {
+    if (i > 0) await sleep(300); // space out batches so we don't burst the rate limit
     const batch = asins.slice(i, i + 100).join(",");
     // Token-frugal: stats + history only. We deliberately skip the expensive
     // `offers` and `buybox` params (each costs several Keepa tokens per ASIN);

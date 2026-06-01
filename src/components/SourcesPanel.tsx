@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { TargetSite } from "@/lib/sources";
 import { parseSiteInput } from "@/lib/sources";
 import { storeHomeUrl } from "@/lib/links";
+import { useEscape } from "@/lib/hooks";
 
 // Manage the specific sites the agent searches + the AI web-search toggle.
 export function SourcesPanel({
@@ -15,6 +16,7 @@ export function SourcesPanel({
   onAiChange: (on: boolean) => void;
   onClose: () => void;
 }) {
+  useEscape(onClose);
   const [input, setInput] = useState("");
 
   function add() {

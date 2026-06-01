@@ -5,6 +5,7 @@ import type { BuyItem, BuyStatus, Defensibility, Invoice, Fulfillment } from "@/
 import { computeTotals, complianceSummary, defensibilityOf, setInvoice, setFulfillment, setTracking } from "@/lib/buylist";
 import { usd } from "@/lib/format";
 import { resolveSourceUrl, amazonUrl } from "@/lib/links";
+import { useEscape } from "@/lib/hooks";
 
 const STATUSES: BuyStatus[] = ["to_buy", "ordered", "received"];
 const STATUS_LABEL: Record<BuyStatus, string> = {
@@ -24,6 +25,7 @@ export function BuyListPanel({
   onChange: (items: BuyItem[]) => void;
   onClose: () => void;
 }) {
+  useEscape(onClose);
   const t = computeTotals(items);
   const c = complianceSummary(items);
   const [openInvoice, setOpenInvoice] = useState<string | null>(null);

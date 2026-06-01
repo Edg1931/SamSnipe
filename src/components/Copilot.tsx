@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Deal } from "@/lib/types";
+import { useEscape } from "@/lib/hooks";
 
 interface Turn { role: "user" | "assistant"; content: string }
 
@@ -15,6 +16,7 @@ export function Copilot({
   aiOn: boolean;
   onClose: () => void;
 }) {
+  useEscape(onClose);
   const [turns, setTurns] = useState<Turn[]>([{
     role: "assistant",
     content: aiOn

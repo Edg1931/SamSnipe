@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useEscape } from "@/lib/hooks";
 
 interface ScannedProduct { name: string; brand: string; category: string; note: string }
 
@@ -8,6 +9,7 @@ interface ScannedProduct { name: string; brand: string; category: string; note: 
 // products, and you get instant research links. On mobile the file input opens
 // the camera directly.
 export function ScanModal({ aiOn, onClose }: { aiOn: boolean; onClose: () => void }) {
+  useEscape(onClose);
   const [products, setProducts] = useState<ScannedProduct[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);

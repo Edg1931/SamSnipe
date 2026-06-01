@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { parseBrandInput } from "@/lib/brands";
+import { useEscape } from "@/lib/hooks";
 
 // Manage the exempt-brand blocklist. Add one at a time or paste many.
 export function BrandsPanel({
@@ -13,6 +14,7 @@ export function BrandsPanel({
   onChange: (b: string[]) => void;
   onClose: () => void;
 }) {
+  useEscape(onClose);
   const [input, setInput] = useState("");
 
   function add() {

@@ -8,7 +8,8 @@ import { resolveCandidates } from "@/lib/keepa";
 // web); Amazon sell-side comes from Keepa when the key is working.
 export async function POST(req: Request) {
   try {
-    const { brief } = (await req.json().catch(() => ({}))) as { brief?: string };
+    const { brief, targets, sites } = (await req.json().catch(() => ({}))) as
+      { brief?: string; targets?: string[]; sites?: string[] };
     if (!aiEnabled()) {
       return NextResponse.json({
         deals: [],
@@ -16,7 +17,7 @@ export async function POST(req: Request) {
         message: "Add ANTHROPIC_API_KEY to enable AI web-search discovery.",
       });
     }
-    const { candidates, source } = await discoverDeals(brief);
+    const { candidates, source } = await discoverDeals({ brief, targets, sites });
     if (candidates.length === 0) {
       return NextResponse.json({ deals: [], source, message: "No web deals found this pass — try again or refine the brief." });
     }

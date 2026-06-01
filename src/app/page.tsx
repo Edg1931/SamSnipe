@@ -273,7 +273,12 @@ export default function Home() {
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief: query }),
+        body: JSON.stringify({
+          brief: query,
+          // Saved searches you're hunting + your tracked sources steer the AI.
+          targets: searches.filter((s) => s.enabled).map((s) => s.query).filter(Boolean),
+          sites: sites.filter((s) => s.enabled).map((s) => s.domain),
+        }),
       });
       const data = await res.json();
       if (Array.isArray(data.deals) && data.deals.length > 0) {

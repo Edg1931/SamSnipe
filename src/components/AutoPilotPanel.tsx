@@ -98,7 +98,7 @@ export function AutoPilotPanel({
               <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/15 text-accent">⚡</span>
               Auto-Pilot
             </h2>
-            <p className="mt-0.5 text-[11px] text-text-dim">Saved briefs the agent hunts for you — on demand.</p>
+            <p className="mt-0.5 text-[11px] text-text-dim">Save what you&apos;re hunting — the AI web search & Run now use these to find it.</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-text-dim hover:bg-white/5 hover:text-text">✕</button>
         </div>
@@ -152,7 +152,8 @@ export function AutoPilotPanel({
 
         {/* New watch */}
         <div className="mt-4 space-y-2">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-text-dim">New watch</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-text-dim">New search target</div>
+          <p className="text-[10px] text-text-faint">Save a product or brief you&apos;re hunting (e.g. “Dyson V8 under $200” or “toys 50% ROI”). AI Discover &amp; Auto-Pilot will search the web for it.</p>
           <input
             value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (e.g. Clearance toys)"
             className="w-full rounded-lg border border-border bg-black/30 px-3 py-2 text-[13px] text-text placeholder:text-text-faint outline-none focus:border-accent/50"

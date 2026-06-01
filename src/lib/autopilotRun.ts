@@ -34,7 +34,9 @@ export async function runAutopilot(opts?: { web?: boolean }): Promise<{ findings
   const useWeb = opts?.web !== false && aiEnabled();
   if (useWeb) {
     try {
-      const { candidates } = await discoverDeals();
+      // Hunt the exact briefs you've saved as watches.
+      const targets = watches.map((w) => w.query).filter(Boolean);
+      const { candidates } = await discoverDeals({ targets });
       if (candidates.length) pool = [...pool, ...(await resolveCandidates(candidates))];
     } catch { /* additive */ }
   }

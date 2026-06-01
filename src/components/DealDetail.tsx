@@ -25,8 +25,10 @@ interface AIVerdict {
   source: "ai" | "rules";
 }
 
-// Slide-over: full deal breakdown, live AI analysis, sell-through model,
-// what-if profit calculator, real outbound links, and buy-list actions.
+// Full-page deal workspace: identity + verdict in a sticky header, with the
+// full breakdown (trust, survival, AI analysis, sell-through, price history,
+// source options, profit calculator, exit channel, risks) spread across a
+// multi-column grid, plus verify links and buy-list actions.
 export function DealDetail({
   deal, inBuyList, exempted, approvals, onClose, onAddToBuyList, onPass, onExemptBrand,
 }: {
@@ -99,39 +101,43 @@ export function DealDetail({
   const trust = assessTrust(deal);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-stretch lg:justify-end">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      {/* Bottom sheet on phones, right-side drawer on desktop. */}
-      <aside className="glass animate-rise relative max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border-t border-border p-5 lg:h-full lg:max-h-none lg:max-w-md lg:rounded-t-none lg:border-l lg:border-t-0">
-        {/* Grab handle (mobile only) */}
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 lg:hidden" />
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <a href={azUrl} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Open on Amazon">
-              {deal.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={deal.imageUrl} alt={deal.title} className="h-12 w-12 rounded-xl bg-white/5 object-contain p-1" />
-              ) : (
-                <div className="grid h-12 w-12 place-items-center rounded-xl font-bold text-white/90" style={{ background: `linear-gradient(135deg, ${deal.imageColor}, ${deal.imageColor}99)` }}>
-                  {deal.brand.slice(0, 2)}
-                </div>
-              )}
-            </a>
-            <div>
-              <a href={azUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold leading-tight text-text hover:text-accent">
-                {deal.title}
-              </a>
-              <p className="text-[11px] text-text-dim">
-                <a href={amazonSearch(deal.brand)} target="_blank" rel="noopener noreferrer" className="hover:text-accent">{deal.brand}</a>
-                {" · "}{deal.category}
-                {deal.rating ? <> · ★ {deal.rating}{deal.reviewCount ? ` (${deal.reviewCount.toLocaleString()})` : ""}</> : null}
-              </p>
+    <div className="fixed inset-0 z-50 flex flex-col bg-bg">
+      {/* Sticky page header — identity, verdict, primary actions */}
+      <header className="glass animate-rise sticky top-0 z-10 flex items-center gap-3 border-b border-border px-4 py-3 lg:px-6">
+        <button onClick={onClose} title="Close (Esc)" aria-label="Close" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-lg text-text-dim hover:bg-white/5 hover:text-text">✕</button>
+        <a href={azUrl} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Open on Amazon">
+          {deal.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={deal.imageUrl} alt={deal.title} className="h-10 w-10 rounded-xl bg-white/5 object-contain p-1" />
+          ) : (
+            <div className="grid h-10 w-10 place-items-center rounded-xl font-bold text-white/90" style={{ background: `linear-gradient(135deg, ${deal.imageColor}, ${deal.imageColor}99)` }}>
+              {deal.brand.slice(0, 2)}
             </div>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-text-dim hover:bg-white/5 hover:text-text">✕</button>
+          )}
+        </a>
+        <div className="min-w-0 flex-1">
+          <a href={azUrl} target="_blank" rel="noopener noreferrer" className="block truncate text-sm font-semibold leading-tight text-text hover:text-accent">
+            {deal.title}
+          </a>
+          <p className="truncate text-[11px] text-text-dim">
+            <a href={amazonSearch(deal.brand)} target="_blank" rel="noopener noreferrer" className="hover:text-accent">{deal.brand}</a>
+            {" · "}{deal.category}
+            {deal.rating ? <> · ★ {deal.rating}{deal.reviewCount ? ` (${deal.reviewCount.toLocaleString()})` : ""}</> : null}
+          </p>
         </div>
+        <div className="hidden items-center gap-2 sm:flex">
+          <button onClick={() => onPass(deal)} className="rounded-xl border border-border bg-white/5 px-4 py-2 text-[12px] font-medium text-text-dim hover:bg-white/10">Pass</button>
+          <button onClick={() => onAddToBuyList(deal)} disabled={inBuyList} className="rounded-xl bg-accent px-4 py-2 text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-50">{inBuyList ? "✓ In buy list" : "Add to buy list"}</button>
+        </div>
+        <VerdictBadge verdict={deal.verdict} />
+      </header>
 
-        <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-black/20 p-3">
+      {/* Scrollable full-page body — insight spread across a multi-column grid */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-6xl px-4 py-5 lg:px-6">
+          <div className="columns-1 gap-4 md:columns-2 xl:columns-3">
+
+        <div className="mb-4 flex break-inside-avoid items-center justify-between rounded-xl border border-border bg-black/20 p-3">
           <div className="flex items-center gap-3">
             <ConfidenceRing match={deal.match} size={52} />
             <div>
@@ -141,11 +147,10 @@ export function DealDetail({
               <div className="text-[11px] text-text-dim">via {deal.match.method.join(" + ")}</div>
             </div>
           </div>
-          <VerdictBadge verdict={deal.verdict} />
         </div>
 
         {/* Data & trust */}
-        <div className="mt-3 rounded-xl border p-3" style={{ borderColor: `${trust.color}40`, background: `${trust.color}0d` }}>
+        <div className="mb-4 break-inside-avoid rounded-xl border p-3" style={{ borderColor: `${trust.color}40`, background: `${trust.color}0d` }}>
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: trust.color }}>
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: trust.color }} />
@@ -174,12 +179,12 @@ export function DealDetail({
             <a href={azUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Verify on Amazon ↗</a>
             {keUrl && <a href={keUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Verify on Keepa ↗</a>}
           </div>
+          <p className="mt-2 border-t border-border-soft pt-2 text-[11px] leading-relaxed text-text-dim">{deal.match.rationale}</p>
         </div>
-        <p className="mt-2 text-[11px] leading-relaxed text-text-dim">{deal.match.rationale}</p>
 
         {/* Account-survival score */}
         <div
-          className="mt-4 rounded-xl border p-3"
+          className="mb-4 break-inside-avoid rounded-xl border p-3"
           style={{ borderColor: `${SURVIVAL_COLOR[survival.band]}40`, background: `${SURVIVAL_COLOR[survival.band]}0d` }}
         >
           <div className="flex items-center justify-between">
@@ -212,7 +217,7 @@ export function DealDetail({
         </div>
 
         {/* Ungating status */}
-        <div className="mt-3 flex items-start gap-2 rounded-xl border border-border bg-black/20 p-2.5">
+        <div className="mb-4 flex break-inside-avoid items-start gap-2 rounded-xl border border-border bg-black/20 p-2.5">
           <span
             className="mt-0.5 h-2 w-2 shrink-0 rounded-full"
             style={{ background: ungating.status === "open" ? "#10d98e" : ungating.status === "approved" ? "#10d98e" : ungating.canUngate ? "#f5a524" : "#f4476b" }}
@@ -224,7 +229,7 @@ export function DealDetail({
         </div>
 
         {/* AI analysis */}
-        <div className="mt-4 rounded-xl border border-accent/20 bg-accent/5 p-3">
+        <div className="mb-4 break-inside-avoid rounded-xl border border-accent/20 bg-accent/5 p-3">
           <div className="mb-1 flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent">
               <Spark /> AI analysis
@@ -258,7 +263,7 @@ export function DealDetail({
         </div>
 
         {/* Sell-through model */}
-        <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
+        <div className="mb-4 break-inside-avoid rounded-xl border border-border bg-black/20 p-3">
           <div className="mb-2 flex items-center justify-between text-[11px] text-text-dim">
             <span className="font-semibold uppercase tracking-wide">Sell-through forecast</span>
             <span>{v.confidence}% confidence</span>
@@ -280,7 +285,7 @@ export function DealDetail({
         </div>
 
         {/* Price history */}
-        <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
+        <div className="mb-4 break-inside-avoid rounded-xl border border-border bg-black/20 p-3">
           <div className="mb-2 flex items-center justify-between text-[11px] text-text-dim">
             {keUrl ? (
               <a href={keUrl} target="_blank" rel="noopener noreferrer" className="hover:text-accent">90-day price history · Keepa ↗</a>
@@ -289,11 +294,13 @@ export function DealDetail({
             )}
             <span>{deal.avg90 ? `avg ${usd(deal.avg90)} · ` : ""}{deal.offerCount} offers</span>
           </div>
-          <Sparkline data={deal.priceHistory} width={380} height={90} color={deal.imageColor} />
+          <div className="overflow-x-auto">
+            <Sparkline data={deal.priceHistory} width={320} height={90} color={deal.imageColor} />
+          </div>
         </div>
 
         {/* Source options (real retailer prices) */}
-        <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
+        <div className="mb-4 break-inside-avoid rounded-xl border border-border bg-black/20 p-3">
           <div className="mb-2 flex items-center justify-between text-[11px]">
             <span className="font-semibold uppercase tracking-wide text-text-dim">Source options</span>
             {retailSrc && (
@@ -342,7 +349,7 @@ export function DealDetail({
         </div>
 
         {/* Live profit calculator */}
-        <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
+        <div className="mb-4 break-inside-avoid rounded-xl border border-border bg-black/20 p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-text-dim">Profit calculator</div>
           <p className="mb-3 mt-0.5 text-[10px] text-text-faint">
             {trust.feesSource === "keepa"
@@ -365,7 +372,7 @@ export function DealDetail({
         </div>
 
         {/* Multi-channel exits */}
-        <div className="mt-4 rounded-xl border border-border bg-black/20 p-3">
+        <div className="mb-4 break-inside-avoid rounded-xl border border-border bg-black/20 p-3">
           <div className="mb-2 flex items-center justify-between text-[11px]">
             <span className="font-semibold uppercase tracking-wide text-text-dim">Best exit channel</span>
             <span className="text-text-dim">winner: <span className="font-semibold text-accent">{best.channel}</span></span>
@@ -397,7 +404,7 @@ export function DealDetail({
 
         {/* Risks */}
         {deal.risks.length > 0 && (
-          <div className="mt-4">
+          <div className="mb-4 break-inside-avoid rounded-xl border border-border bg-black/20 p-3">
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-dim">Risk radar</div>
             <div className="flex flex-wrap gap-1.5">
               {deal.risks.map((r) => <RiskChip key={r} risk={r} />)}
@@ -408,48 +415,35 @@ export function DealDetail({
           </div>
         )}
 
-        {/* Links — every destination is real and clickable */}
-        <div className={`mt-5 grid gap-2 ${keUrl ? "grid-cols-3" : "grid-cols-2"}`}>
-          <a
-            href={srcUrl} target="_blank" rel="noopener noreferrer"
-            className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text hover:bg-white/10"
-          >
-            {deal.source} ↗
-          </a>
-          <a
-            href={azUrl} target="_blank" rel="noopener noreferrer"
-            className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text hover:bg-white/10"
-          >
-            Amazon ↗
-          </a>
-          {keUrl && (
-            <a
-              href={keUrl} target="_blank" rel="noopener noreferrer"
-              className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text hover:bg-white/10"
-            >
-              Keepa ↗
-            </a>
-          )}
-        </div>
+          </div>{/* end columns grid */}
 
-        {/* Buy-list actions */}
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <button
-            onClick={() => onPass(deal)}
-            className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text-dim hover:bg-white/10"
-          >
-            Pass
-          </button>
-          <button
-            onClick={() => onAddToBuyList(deal)}
-            disabled={inBuyList}
-            className="rounded-xl bg-accent py-2.5 text-center text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-50"
-          >
-            {inBuyList ? "✓ In buy list" : "Add to buy list"}
-          </button>
+          {/* Verify links — full width */}
+          <div className={`mt-2 grid grid-cols-1 gap-2 ${keUrl ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+            <a href={srcUrl} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text hover:bg-white/10">
+              {deal.source} ↗
+            </a>
+            <a href={azUrl} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text hover:bg-white/10">
+              Amazon ↗
+            </a>
+            {keUrl && (
+              <a href={keUrl} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text hover:bg-white/10">
+                Keepa ↗
+              </a>
+            )}
+          </div>
+
+          {/* Buy-list actions — mobile (the sticky header carries them on sm+) */}
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:hidden">
+            <button onClick={() => onPass(deal)} className="rounded-xl border border-border bg-white/5 py-2.5 text-center text-[12px] font-medium text-text-dim hover:bg-white/10">
+              Pass
+            </button>
+            <button onClick={() => onAddToBuyList(deal)} disabled={inBuyList} className="rounded-xl bg-accent py-2.5 text-center text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-50">
+              {inBuyList ? "✓ In buy list" : "Add to buy list"}
+            </button>
+          </div>
+          <div className="h-6" />
         </div>
-        <div className="h-4" />
-      </aside>
+      </div>
     </div>
   );
 }

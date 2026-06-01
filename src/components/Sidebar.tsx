@@ -10,6 +10,7 @@ const NAV: { key: string; label: string; icon: string }[] = [
   { key: "buylist", label: "Buy List", icon: "M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" },
   { key: "optimizer", label: "Optimizer", icon: "M3 3v18h18M7 14l3-4 3 3 4-6" },
   { key: "scan", label: "Shelf Scan", icon: "M3 7h3l2-2h8l2 2h3v12H3z" },
+  { key: "barcode", label: "Scan Barcode", icon: "M3 5v14M7 5v14M11 5v14M14 5v14M18 5v14M21 5v14" },
   { key: "import", label: "Import / Manifest", icon: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" },
   { key: "sources", label: "Sources", icon: "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.5 2.5 15 0 18" },
   { key: "approvals", label: "Approvals", icon: "M7.5 15.5a4.5 4.5 0 100-9 4.5 4.5 0 000 9zm3.2-3.2L19 4m-3 0h3v3" },

@@ -9,7 +9,7 @@ import type { Deal } from "@/lib/types";
 
 // How many top deals get a real live retailer-price / SP-API fee lookup per load.
 const RETAIL_LOOKUPS = Math.max(0, Math.min(40, Number(process.env.SAMSNIPE_RETAIL_LOOKUPS || "10")));
-const FEE_LOOKUPS = Math.max(0, Math.min(30, Number(process.env.SAMSNIPE_FEE_LOOKUPS || "8")));
+const FEE_LOOKUPS = Math.max(0, Math.min(60, Number(process.env.SAMSNIPE_FEE_LOOKUPS || "20")));
 
 // GET /api/deals?q=...&seed=...&sites=walmart.com,target.com&ai=1
 // Live Keepa data when configured (with mock fallback); AI parses the brief.

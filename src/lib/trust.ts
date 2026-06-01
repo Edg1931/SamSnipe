@@ -33,6 +33,26 @@ const LABEL: Record<TrustLevel, string> = {
   demo: "Demo data",
 };
 
+export interface VerifiedScore {
+  count: number;
+  total: number;
+  color: string;
+  items: { label: string; ok: boolean }[];
+}
+
+/** How many of a deal's key figures are backed by live data (price/cost/fees). */
+export function verifiedScore(deal: Deal): VerifiedScore {
+  const t = assessTrust(deal);
+  const items = [
+    { label: "Sell price", ok: t.level === "verified" },
+    { label: "Buy cost", ok: deal.costSource === "live" },
+    { label: "Fees", ok: deal.feesSource === "keepa" || deal.feesSource === "spapi" },
+  ];
+  const count = items.filter((i) => i.ok).length;
+  const color = count === items.length ? "#10d98e" : count >= 1 ? "#f5a524" : "#64748b";
+  return { count, total: items.length, color, items };
+}
+
 function daysBetween(iso: string, now: number): number {
   return Math.max(0, Math.round((now - new Date(iso).getTime()) / 86400000));
 }

@@ -5,7 +5,7 @@ import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges
 import { Sparkline } from "./Sparkline";
 import { computeSurvival } from "@/lib/survival";
 import { estimateVelocity } from "@/lib/velocity";
-import { assessTrust } from "@/lib/trust";
+import { assessTrust, verifiedScore } from "@/lib/trust";
 import { dealScore, SCORE_COLOR, scoreGrade } from "@/lib/score";
 import { sourceLink, amazonUrl, keepaUrl, amazonSearch } from "@/lib/links";
 
@@ -23,6 +23,7 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
     (deal.feesSource === "keepa" || deal.feesSource === "spapi") && "Fees",
     deal.costSource === "live" && "Cost",
   ].filter(Boolean) as string[];
+  const vs = verifiedScore(deal);
   // Entry-quality: is the current Amazon price below its 90-day average?
   const priceTrend = deal.avg90 ? (deal.amazonPrice <= deal.avg90 ? "below" : "above") : null;
   const srcUrl = sourceLink(deal);
@@ -91,13 +92,16 @@ export function DealCard({ deal, onClick }: { deal: Deal; onClick: () => void })
             <span className="text-[11px] text-text-faint">ASIN match</span>
             <span className="flex items-center gap-1.5 text-[10px]">
               {deal.match.packSizeWarning && <span className="font-medium text-warn" title="Pack/quantity may differ between source and listing">⚠ pack</span>}
-              {ticks.length > 0 ? (
-                ticks.map((t) => (
-                  <span key={t} className="font-medium text-accent" title="Confirmed from a real data source">✓ {t}</span>
-                ))
-              ) : (
-                <span className="text-text-faint" title="These figures are modeled estimates">estimates</span>
-              )}
+              <span
+                className="rounded px-1 py-0.5 font-semibold"
+                style={{ color: vs.color, background: `${vs.color}1f` }}
+                title="Key figures backed by live data — sell price · buy cost · fees"
+              >
+                {vs.count}/{vs.total} live
+              </span>
+              {ticks.map((t) => (
+                <span key={t} className="font-medium text-accent" title="Confirmed from a real data source">✓ {t}</span>
+              ))}
             </span>
           </div>
           <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-text-dim">{deal.match.rationale}</p>

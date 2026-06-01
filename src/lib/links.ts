@@ -7,10 +7,17 @@ const RETAIL_SEARCH: Record<string, (q: string) => string> = {
   "walmart.com": (q) => `https://www.walmart.com/search?q=${q}`,
   "target.com": (q) => `https://www.target.com/s?searchTerm=${q}`,
   "homedepot.com": (q) => `https://www.homedepot.com/s/${q}`,
+  "lowes.com": (q) => `https://www.lowes.com/search?searchTerm=${q}`,
   "bestbuy.com": (q) => `https://www.bestbuy.com/site/searchpage.jsp?st=${q}`,
   "ebay.com": (q) => `https://www.ebay.com/sch/i.html?_nkw=${q}`,
   "costco.com": (q) => `https://www.costco.com/CatalogSearch?keyword=${q}`,
   "kohls.com": (q) => `https://www.kohls.com/search.jsp?search=${q}`,
+  "macys.com": (q) => `https://www.macys.com/shop/featured/${q}`,
+  "biglots.com": (q) => `https://www.biglots.com/search?q=${q}`,
+  "samsclub.com": (q) => `https://www.samsclub.com/s/${q}`,
+  "wayfair.com": (q) => `https://www.wayfair.com/keyword.php?keyword=${q}`,
+  "zoro.com": (q) => `https://www.zoro.com/search?q=${q}`,
+  "officedepot.com": (q) => `https://www.officedepot.com/catalog/search.do?Ntt=${q}`,
 };
 
 // Map our display source names → domains used for search URLs.
@@ -18,10 +25,22 @@ const NAME_TO_DOMAIN: Record<string, string> = {
   Walmart: "walmart.com",
   Target: "target.com",
   "Home Depot": "homedepot.com",
+  "Lowe's": "lowes.com",
   "Best Buy": "bestbuy.com",
   eBay: "ebay.com",
   Costco: "costco.com",
+  "Sam's Club": "samsclub.com",
   "Kohl's": "kohls.com",
+  "Macy's": "macys.com",
+  "Big Lots": "biglots.com",
+  Wayfair: "wayfair.com",
+  Zoro: "zoro.com",
+  Staples: "staples.com",
+  "Office Depot": "officedepot.com",
+  CVS: "cvs.com",
+  Walgreens: "walgreens.com",
+  QVC: "qvc.com",
+  JCPenney: "jcpenney.com",
 };
 
 export function amazonUrl(asin: string): string | null {

@@ -35,3 +35,9 @@ export const SCORE_COLOR: Record<DealScore["band"], string> = {
   ok: "#f5a524",
   weak: "#f4476b",
 };
+
+/** Letter grade for a 0–100 Deal Score — fast at-a-glance triage. */
+export function scoreGrade(score: number): string {
+  return score >= 90 ? "A+" : score >= 80 ? "A" : score >= 70 ? "B+"
+    : score >= 60 ? "B" : score >= 45 ? "C" : score >= 30 ? "D" : "F";
+}

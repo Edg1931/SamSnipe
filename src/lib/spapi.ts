@@ -1,0 +1,182 @@
+// Amazon Selling Partner API (SP-API) — real Amazon economics for a deal:
+// exact FBA + referral fees, Buy Box / competition, and gating eligibility.
+//
+// Auth is token-only (LWA): exchange the refresh token for an access token and
+// call SP-API with `x-amz-access-token` (no AWS SigV4 needed since 2023). Every
+// call degrades to null on any failure or when unconfigured, so the app keeps
+// working on estimates without it.
+
+const CLIENT_ID = process.env.SPAPI_CLIENT_ID;
+const CLIENT_SECRET = process.env.SPAPI_CLIENT_SECRET;
+const REFRESH_TOKEN = process.env.SPAPI_REFRESH_TOKEN;
+const MARKETPLACE_ID = process.env.SPAPI_MARKETPLACE_ID || "ATVPDKIKX0DER"; // Amazon US
+const SELLER_ID = process.env.SPAPI_SELLER_ID; // merchant token, required for gating
+const ENDPOINT = process.env.SPAPI_ENDPOINT || "https://sellingpartnerapi-na.amazon.com";
+
+export const spApiEnabled = (): boolean => Boolean(CLIENT_ID && CLIENT_SECRET && REFRESH_TOKEN);
+
+export interface SpFees { total: number; referral: number; fba: number; variableClosing?: number }
+export interface SpBuyBox { buyBoxPrice: number | null; offerCount: number; fbaOffers: number }
+export interface SpGating { gated: boolean; reasons: string[]; approvalUrl?: string }
+export interface SpEconomics {
+  fees: SpFees | null;
+  buyBox: SpBuyBox | null;
+  gating: SpGating | null;
+}
+
+// --- LWA access token (cached in-process until ~1 min before expiry) ---
+let cached: { value: string; exp: number } | null = null;
+async function accessToken(): Promise<string | null> {
+  if (!spApiEnabled()) return null;
+  if (cached && cached.exp > Date.now() + 60_000) return cached.value;
+  try {
+    const res = await fetch("https://api.amazon.com/auth/o2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: REFRESH_TOKEN!,
+        client_id: CLIENT_ID!,
+        client_secret: CLIENT_SECRET!,
+      }),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const d = (await res.json()) as { access_token?: string; expires_in?: number };
+    if (!d.access_token) return null;
+    cached = { value: d.access_token, exp: Date.now() + (d.expires_in ?? 3600) * 1000 };
+    return cached.value;
+  } catch {
+    return null;
+  }
+}
+
+type Json = Record<string, unknown>;
+async function sp(path: string, init?: RequestInit): Promise<Json | null> {
+  const token = await accessToken();
+  if (!token) return null;
+  try {
+    const res = await fetch(`${ENDPOINT}${path}`, {
+      ...init,
+      headers: { "x-amz-access-token": token, "content-type": "application/json", ...(init?.headers || {}) },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as Json;
+  } catch {
+    return null;
+  }
+}
+
+const num = (v: unknown): number => (typeof v === "number" ? v : Number(v) || 0);
+// Drill into a nested object/array path safely.
+function dig(obj: unknown, ...keys: (string | number)[]): unknown {
+  let cur: unknown = obj;
+  for (const k of keys) {
+    if (cur == null) return undefined;
+    cur = (cur as Record<string | number, unknown>)[k];
+  }
+  return cur;
+}
+
+/** Exact FBA + referral fees for an ASIN at a given sell price. */
+export async function getFees(asin: string, price: number): Promise<SpFees | null> {
+  if (!asin || price <= 0) return null;
+  const data = await sp(`/products/fees/v0/items/${encodeURIComponent(asin)}/feesEstimate`, {
+    method: "POST",
+    body: JSON.stringify({
+      FeesEstimateRequest: {
+        MarketplaceId: MARKETPLACE_ID,
+        IsAmazonFulfilled: true,
+        PriceToEstimateFees: { ListingPrice: { CurrencyCode: "USD", Amount: price } },
+        Identifier: "samsnipe-1",
+      },
+    }),
+  });
+  const result = dig(data, "payload", "FeesEstimateResult");
+  const estimate = dig(result, "FeesEstimate") as Json | undefined;
+  if (!estimate) return null;
+  const total = num(dig(estimate, "TotalFeesEstimate", "Amount"));
+  const details = (dig(estimate, "FeeDetailList") as Json[] | undefined) ?? [];
+  let referral = 0, fba = 0, variableClosing = 0;
+  for (const d of details) {
+    const type = String(dig(d, "FeeType") ?? "");
+    const amt = num(dig(d, "FinalFee", "Amount"));
+    if (type === "ReferralFee") referral = amt;
+    else if (type === "FBAFees" || type === "FulfillmentFees") fba = amt;
+    else if (type === "VariableClosingFee") variableClosing = amt;
+  }
+  return total > 0 ? { total: +total.toFixed(2), referral: +referral.toFixed(2), fba: +fba.toFixed(2), variableClosing } : null;
+}
+
+/** Buy Box price + competition (offer counts). */
+export async function getBuyBox(asin: string): Promise<SpBuyBox | null> {
+  if (!asin) return null;
+  const data = await sp(`/products/pricing/v0/items/${encodeURIComponent(asin)}/offers?MarketplaceId=${MARKETPLACE_ID}&ItemCondition=New`);
+  const summary = dig(data, "payload", "Summary") as Json | undefined;
+  if (!summary) return null;
+  const buyBoxPrices = dig(summary, "BuyBoxPrices") as Json[] | undefined;
+  const buyBoxPrice = buyBoxPrices?.length ? num(dig(buyBoxPrices[0], "ListingPrice", "Amount")) : null;
+  const offerCounts = (dig(summary, "NumberOfOffers") as Json[] | undefined) ?? [];
+  let offerCount = 0, fbaOffers = 0;
+  for (const o of offerCounts) {
+    const c = num(dig(o, "OfferCount"));
+    offerCount += c;
+    if (String(dig(o, "fulfillmentChannel") ?? dig(o, "FulfillmentChannel") ?? "") === "Amazon") fbaOffers += c;
+  }
+  return { buyBoxPrice, offerCount, fbaOffers };
+}
+
+/** Whether you're allowed to list this ASIN (gating / brand approval). */
+export async function getGating(asin: string): Promise<SpGating | null> {
+  if (!asin || !SELLER_ID) return null;
+  const data = await sp(`/listings/restrictions?asin=${encodeURIComponent(asin)}&conditionType=new_new&sellerId=${encodeURIComponent(SELLER_ID)}&marketplaceIds=${MARKETPLACE_ID}`);
+  const restrictions = dig(data, "restrictions") as Json[] | undefined;
+  if (!Array.isArray(restrictions)) return null;
+  if (restrictions.length === 0) return { gated: false, reasons: [] };
+  const reasons: string[] = [];
+  let approvalUrl: string | undefined;
+  for (const r of restrictions) {
+    const rs = (dig(r, "reasons") as Json[] | undefined) ?? [];
+    for (const reason of rs) {
+      const msg = String(dig(reason, "message") ?? "Approval required");
+      reasons.push(msg);
+      const links = (dig(reason, "links") as Json[] | undefined) ?? [];
+      if (links.length && !approvalUrl) approvalUrl = String(dig(links[0], "resource") ?? "");
+    }
+  }
+  return { gated: true, reasons, approvalUrl };
+}
+
+/** Resolve a UPC/EAN to an Amazon ASIN + title via the Catalog API. */
+export async function catalogByUpc(upc: string): Promise<{ asin: string; title: string; brand: string } | null> {
+  if (!upc) return null;
+  const data = await sp(`/catalog/2022-04-01/items?identifiers=${encodeURIComponent(upc)}&identifiersType=UPC&marketplaceIds=${MARKETPLACE_ID}&includedData=summaries`);
+  const items = dig(data, "items") as Json[] | undefined;
+  const first = items?.[0];
+  if (!first) return null;
+  const asin = String(dig(first, "asin") ?? "");
+  const summary = (dig(first, "summaries") as Json[] | undefined)?.[0];
+  const title = String(dig(summary, "itemName") ?? "");
+  const brand = String(dig(summary, "brand") ?? "");
+  return asin ? { asin, title, brand } : null;
+}
+
+/** Everything for a deal's drawer in one call (each piece independent). */
+export async function getEconomics(asin: string, price: number): Promise<SpEconomics> {
+  const [fees, buyBox, gating] = await Promise.all([getFees(asin, price), getBuyBox(asin), getGating(asin)]);
+  return { fees, buyBox, gating };
+}
+
+/** Diagnostic for the /setup page. */
+export async function spApiStatus(): Promise<{ configured: boolean; ok: boolean; sellerId: boolean; reason: string }> {
+  if (!spApiEnabled()) {
+    return { configured: false, ok: false, sellerId: Boolean(SELLER_ID), reason: "Set SPAPI_CLIENT_ID, SPAPI_CLIENT_SECRET and SPAPI_REFRESH_TOKEN." };
+  }
+  const token = await accessToken();
+  if (!token) return { configured: true, ok: false, sellerId: Boolean(SELLER_ID), reason: "Credentials present but LWA token exchange failed — check the client id/secret/refresh token." };
+  return {
+    configured: true, ok: true, sellerId: Boolean(SELLER_ID),
+    reason: SELLER_ID ? "Connected — live fees, Buy Box & gating." : "Connected — live fees & Buy Box. Add SPAPI_SELLER_ID for gating checks.",
+  };
+}

@@ -24,6 +24,13 @@ interface AIVerdict {
   source: "ai" | "rules";
 }
 
+interface SpEcon {
+  configured: boolean;
+  fees?: { total: number; referral: number; fba: number } | null;
+  buyBox?: { buyBoxPrice: number | null; offerCount: number; fbaOffers: number } | null;
+  gating?: { gated: boolean; reasons: string[]; approvalUrl?: string } | null;
+}
+
 // Full-page deal workspace: identity + verdict in a sticky header, with the
 // full breakdown (trust, survival, AI analysis, sell-through, price history,
 // source options, profit calculator, exit channel, risks) spread across a
@@ -55,6 +62,24 @@ export function DealDetail({
   const [offers, setOffers] = useState<RetailOffer[] | null>(null);
   const [retailSrc, setRetailSrc] = useState<"live" | "mock" | null>(null);
   const [offersLoading, setOffersLoading] = useState(true);
+
+  // Live Amazon economics from SP-API (fees / Buy Box / gating) when configured.
+  const [econ, setEcon] = useState<SpEcon | null>(null);
+  useEffect(() => {
+    let live = true;
+    const id = setTimeout(() => {
+      setEcon(null);
+      fetch("/api/spapi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asin: deal.match.asin, price: deal.amazonPrice }),
+      })
+        .then((r) => r.json())
+        .then((d) => { if (live) setEcon(d); })
+        .catch(() => {});
+    }, 0);
+    return () => { live = false; clearTimeout(id); };
+  }, [deal]);
 
   useEffect(() => {
     let live = true;
@@ -349,6 +374,47 @@ export function DealDetail({
             <p className="text-[11px] text-text-dim">No retailer matches found — verify the item manually.</p>
           )}
         </div>
+
+        {/* Amazon economics — live SP-API (real fees, Buy Box, gating) */}
+        {econ?.configured && (econ.fees || econ.buyBox || econ.gating) && (
+          <div className="mb-4 break-inside-avoid rounded-xl border border-accent/30 bg-accent/5 p-3">
+            <div className="mb-2 flex items-center justify-between text-[11px]">
+              <span className="font-semibold uppercase tracking-wide text-accent">Amazon economics · SP-API</span>
+              <span className="rounded-md bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">verified</span>
+            </div>
+            {econ.fees && (
+              <div className="space-y-1.5 text-[12px]">
+                <Row label="Referral fee" value={`−${usd(econ.fees.referral)}`} />
+                <Row label="FBA fee" value={`−${usd(econ.fees.fba)}`} />
+                <Row label="Total Amazon fees" value={`−${usd(econ.fees.total)}`} />
+                <div className="my-1 h-px bg-border" />
+                {(() => {
+                  const net = +(deal.amazonPrice - deal.sourcePrice - econ.fees!.total).toFixed(2);
+                  return <Row label="Net profit / unit (real fees)" value={usd(net)} strong color={net > 0 ? "#10d98e" : "#f4476b"} />;
+                })()}
+              </div>
+            )}
+            {econ.buyBox && (
+              <p className="mt-2 text-[11px] text-text-dim">
+                Buy Box {econ.buyBox.buyBoxPrice != null ? <span className="font-medium text-text">{usd(econ.buyBox.buyBoxPrice)}</span> : "—"}
+                {" · "}{econ.buyBox.offerCount} offer{econ.buyBox.offerCount === 1 ? "" : "s"} ({econ.buyBox.fbaOffers} FBA)
+              </p>
+            )}
+            {econ.gating && (
+              <div className="mt-2 flex items-start gap-2 text-[11px]">
+                <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full" style={{ background: econ.gating.gated ? "#f4476b" : "#10d98e" }} />
+                <span className="text-text-dim">
+                  {econ.gating.gated ? (
+                    <>Gated — approval required{econ.gating.reasons[0] ? `: ${econ.gating.reasons[0]}` : ""}.{" "}
+                      {econ.gating.approvalUrl && <a href={econ.gating.approvalUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Request approval ↗</a>}</>
+                  ) : (
+                    <span className="text-accent">Ungated — you can list this now.</span>
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Live profit calculator */}
         <div className="mb-4 break-inside-avoid rounded-xl border border-border bg-black/20 p-3">

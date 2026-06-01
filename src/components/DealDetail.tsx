@@ -11,6 +11,7 @@ import { computeUngating, type Approvals } from "@/lib/ungating";
 import { channelOptions } from "@/lib/channels";
 import type { RetailOffer } from "@/lib/retail";
 import { resolveSourceUrl, amazonUrl, keepaUrl, amazonSearch, channelUrl } from "@/lib/links";
+import { useEscape } from "@/lib/hooks";
 import { assessTrust } from "@/lib/trust";
 import { ConfidenceRing, VerdictBadge, RiskChip, SurvivalShield } from "./Badges";
 import { Sparkline } from "./Sparkline";
@@ -38,6 +39,7 @@ export function DealDetail({
   onPass: (deal: Deal) => void;
   onExemptBrand: (brand: string) => void;
 }) {
+  useEscape(onClose);
   const [cost, setCost] = useState(deal.sourcePrice);
   const [sell, setSell] = useState(deal.amazonPrice);
   const p = calcProfit({ cost, sellPrice: sell, category: deal.category });

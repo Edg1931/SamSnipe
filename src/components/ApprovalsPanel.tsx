@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Approvals } from "@/lib/ungating";
+import { useEscape } from "@/lib/hooks";
 
 const CATEGORIES = ["Toys", "Electronics", "Home & Kitchen", "Sports & Outdoors", "Beauty", "Health & Household", "Grocery", "Tools & Home Improvement"];
 
@@ -14,6 +15,7 @@ export function ApprovalsPanel({
   onChange: (a: Approvals) => void;
   onClose: () => void;
 }) {
+  useEscape(onClose);
   const [brand, setBrand] = useState("");
 
   const addBrand = () => {

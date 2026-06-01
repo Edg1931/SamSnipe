@@ -6,10 +6,11 @@ import { usd } from "@/lib/format";
 import { dealScore } from "@/lib/score";
 import { assessTrust } from "@/lib/trust";
 import { DealCard } from "./DealCard";
+import { DealGridSkeleton } from "./Skeleton";
 
 // The daily decision surface: stats, Auto-Pilot finds, and today's best buys.
 export function CommandCenter({
-  deals, dataSource, findingsCount, scanning, discovering,
+  deals, dataSource, findingsCount, scanning, discovering, loading,
   onOpenDeal, onSeeAll, onRunScan, onDiscover, onOpenAutoPilot,
 }: {
   deals: Deal[];
@@ -17,6 +18,7 @@ export function CommandCenter({
   findingsCount: number;
   scanning: boolean;
   discovering: boolean;
+  loading: boolean;
   onOpenDeal: (d: Deal) => void;
   onSeeAll: () => void;
   onRunScan: () => void;
@@ -96,7 +98,9 @@ export function CommandCenter({
         <button onClick={onSeeAll} className="text-[12px] font-medium text-accent hover:underline">Open full feed (filters, table) →</button>
       </div>
 
-      {ranked.length === 0 ? (
+      {loading && ranked.length === 0 ? (
+        <DealGridSkeleton />
+      ) : ranked.length === 0 ? (
         <div className="mt-4 grid place-items-center rounded-2xl border border-dashed border-border py-16 text-center">
           <div className="text-3xl">🎯</div>
           <p className="mt-2 text-sm font-medium text-text">No deals yet</p>

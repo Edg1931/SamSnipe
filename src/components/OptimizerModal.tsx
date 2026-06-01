@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { Deal } from "@/lib/types";
 import { optimizeBasket } from "@/lib/optimizer";
 import { usd } from "@/lib/format";
+import { useEscape } from "@/lib/hooks";
 
 // "Best $X you can spend today" — turns the feed into an optimal buy plan.
 export function OptimizerModal({
@@ -13,6 +14,7 @@ export function OptimizerModal({
   onClose: () => void;
   onAddBasket: (picks: { deal: Deal; qty: number }[]) => void;
 }) {
+  useEscape(onClose);
   const [budget, setBudget] = useState(2000);
   const [safeOnly, setSafeOnly] = useState(true);
 

@@ -5,6 +5,8 @@ import type { Deal } from "@/lib/types";
 import type { SavedSearch } from "@/lib/autopilot";
 import { addSearch, matchCount } from "@/lib/autopilot";
 import { timeAgo } from "@/lib/format";
+import { useEscape } from "@/lib/hooks";
+import { toast } from "@/lib/toast";
 
 interface Findings {
   ranAt: string; totalNew: number; poolSize: number;
@@ -22,6 +24,7 @@ export function AutoPilotPanel({
   onClose: () => void;
   onAddFindings: (deals: Deal[]) => void;
 }) {
+  useEscape(onClose);
   const [name, setName] = useState("");
   const [query, setQuery] = useState("");
   const [findings, setFindings] = useState<Findings | null>(null);
@@ -65,6 +68,11 @@ export function AutoPilotPanel({
       const d = await r.json();
       if (d.findings) setFindings(d.findings);
       if (Array.isArray(d.inbox)) setInbox(d.inbox);
+      const n = d.findings?.totalNew ?? 0;
+      if (n > 0) toast.success(`Auto-Pilot found ${n} new deal${n === 1 ? "" : "s"}`);
+      else toast.info("Auto-Pilot ran — no new deals this time");
+    } catch {
+      toast.error("Auto-Pilot run failed — try again");
     } finally {
       setRunning(false);
     }

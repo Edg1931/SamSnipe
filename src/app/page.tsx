@@ -13,6 +13,8 @@ import { DealDetail } from "@/components/DealDetail";
 import { computeSurvival } from "@/lib/survival";
 import { dealScore } from "@/lib/score";
 import { assessTrust } from "@/lib/trust";
+import { toast } from "@/lib/toast";
+import { DealGridSkeleton } from "@/components/Skeleton";
 import { SourcesPanel } from "@/components/SourcesPanel";
 import { ImportModal } from "@/components/ImportModal";
 import { BrandsPanel } from "@/components/BrandsPanel";
@@ -64,6 +66,7 @@ export default function Home() {
   const [shown, setShown] = useState(PAGE);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [findingsCount, setFindingsCount] = useState(0);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const [crit, setCrit] = useState({ minRoi: 0, maxBsr: 0, maxCost: 0, minSurvival: 0, minSold: 0, category: "" });
 
   // Targeted sources + AI web search + spreadsheet imports.
@@ -194,17 +197,21 @@ export default function Home() {
     setBought((b) => (b.includes(deal.title) ? b : [...b, deal.title]));
     record(deal, "buy");
     setSelected(null);
+    toast.success(`Added “${deal.title}” to your buy list`);
   }
   function handlePass(deal: Deal) {
     setPassed((p) => (p.includes(deal.title) ? p : [...p, deal.title]));
     record(deal, "pass");
     setSelected(null);
+    toast.info(`Passed on “${deal.title}” — tuning your For You feed`);
   }
   function handleAddBasket(picks: { deal: Deal; qty: number }[]) {
     let next = buyList;
     for (const { deal, qty } of picks) next = addToBuyList(next, deal, qty);
     updateBuyList(next);
     picks.forEach(({ deal }) => record(deal, "buy"));
+    const units = picks.reduce((a, p) => a + p.qty, 0);
+    toast.success(`Added ${picks.length} product${picks.length === 1 ? "" : "s"} (${units} units) to your buy list`);
   }
 
   function updateBrands(next: string[]) {
@@ -214,6 +221,7 @@ export default function Home() {
   function handleExemptBrand(brand: string) {
     if (!exemptBrands.some((b) => b.toLowerCase() === brand.toLowerCase())) {
       updateBrands([...exemptBrands, brand].sort((a, b) => a.localeCompare(b)));
+      toast.info(`Hiding ${brand} deals — manage in Brands`);
     }
   }
 
@@ -240,9 +248,12 @@ export default function Home() {
       if (Array.isArray(data.deals) && data.deals.length > 0) {
         setImported((prev) => [...data.deals, ...prev]);
         setShown(PAGE);
+        toast.success(`AI Discover found ${data.deals.length} new deal${data.deals.length === 1 ? "" : "s"}`);
+      } else {
+        toast.info(data.message || "AI Discover found no new deals this time");
       }
     } catch {
-      /* discovery is additive — failures just yield no new deals */
+      toast.error("AI Discover failed — try again in a moment");
     } finally {
       setDiscovering(false);
     }
@@ -253,7 +264,7 @@ export default function Home() {
     const next = seed + 1;
     setSeed(next);
     setTimeout(() => {
-      load(query, next).then(() => setScanning(false));
+      load(query, next).then(() => { setScanning(false); toast.success("Scan complete — feed refreshed"); });
     }, 1400);
   }
 
@@ -394,8 +405,24 @@ export default function Home() {
           </div>
         </header>
 
+        {dataSource === "mock" && !bannerDismissed && (
+          <div className="mx-5 mt-4 flex items-center justify-between gap-3 rounded-xl border border-warn/30 bg-warn/10 px-4 py-2.5 text-[12px]">
+            <span className="flex min-w-0 items-center gap-2 text-text">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-warn" />
+              <span className="truncate">
+                <span className="font-semibold">Demo data</span> — connect Keepa to source live Amazon deals.
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-3">
+              <button onClick={() => router.push("/setup")} className="font-medium text-accent hover:underline">Open Setup →</button>
+              <button onClick={() => setBannerDismissed(true)} className="text-text-faint hover:text-text" aria-label="Dismiss">✕</button>
+            </span>
+          </div>
+        )}
+
         {mode === "home" ? (
           <CommandCenter
+            loading={loading}
             deals={allDeals}
             dataSource={dataSource}
             findingsCount={findingsCount}
@@ -525,6 +552,28 @@ export default function Home() {
             </span>
           </div>
 
+          {/* Quick filters — one-tap presets over the full filter rail */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-text-faint">Quick:</span>
+            {[
+              { label: "BUY only", active: filter === "BUY", on: () => setFilter(filter === "BUY" ? "ALL" : "BUY") },
+              { label: "ROI ≥ 40%", active: crit.minRoi >= 40, on: () => { setCrit((c) => ({ ...c, minRoi: c.minRoi >= 40 ? 0 : 40 })); setShown(PAGE); } },
+              { label: "Verified", active: verifiedOnly, on: () => { setVerifiedOnly((v) => !v); setShown(PAGE); } },
+              { label: "Safe 60+", active: crit.minSurvival >= 60, on: () => { setCrit((c) => ({ ...c, minSurvival: c.minSurvival >= 60 ? 0 : 60 })); setShown(PAGE); } },
+              { label: "Under $25", active: crit.maxCost > 0 && crit.maxCost <= 25, on: () => { setCrit((c) => ({ ...c, maxCost: c.maxCost > 0 && c.maxCost <= 25 ? 0 : 25 })); setShown(PAGE); } },
+            ].map((chip) => (
+              <button
+                key={chip.label}
+                onClick={chip.on}
+                className={`rounded-full border px-3 py-1 text-[11px] font-medium transition ${
+                  chip.active ? "border-accent/50 bg-accent/15 text-accent" : "border-border bg-white/5 text-text-dim hover:text-text"
+                }`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+
           {/* Filter rail */}
           {showFilters && (
             <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl border border-border bg-bg-card/60 p-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -567,9 +616,7 @@ export default function Home() {
           )}
 
           {loading ? (
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} />)}
-            </div>
+            <DealGridSkeleton />
           ) : visible.length === 0 ? (
             <Empty />
           ) : view === "table" ? (
@@ -693,7 +740,7 @@ export default function Home() {
           onChange={updateSearches}
           onRun={runWatch}
           onClose={() => setShowAutoPilot(false)}
-          onAddFindings={(d) => { setImported((prev) => [...d, ...prev]); setShown(PAGE); }}
+          onAddFindings={(d) => { setImported((prev) => [...d, ...prev]); setShown(PAGE); toast.success(`Added ${d.length} find${d.length === 1 ? "" : "s"} to your feed`); }}
         />
       )}
 
@@ -782,10 +829,6 @@ function FilterNum({ label, value, onChange }: { label: string; value: number; o
       />
     </label>
   );
-}
-
-function Skeleton() {
-  return <div className="h-64 animate-pulse rounded-2xl border border-border bg-bg-card/40" />;
 }
 
 function Empty() {

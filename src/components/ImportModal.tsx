@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import type { Deal } from "@/lib/types";
 import type { Field } from "@/lib/import";
+import { useEscape } from "@/lib/hooks";
 
 interface ManifestAnalysis {
   units: number; lines: number; profitableLines: number;
@@ -39,6 +40,7 @@ function PalletStat({ label, value, tone }: { label: string; value: string; tone
 
 // Upload an Excel/CSV, auto-map columns, preview, then push rows into the feed.
 export function ImportModal({ onImport, onClose }: { onImport: (deals: Deal[]) => void; onClose: () => void }) {
+  useEscape(onClose);
   const [result, setResult] = useState<ImportResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
